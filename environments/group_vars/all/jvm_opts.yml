@@ -1,0 +1,111 @@
+---
+
+# Default values if unset
+# jvm_opts.memory: "-Xms512m -Xmx512m"
+# timer_jvm_opts.memory: "-Xms32m -Xmx128m"
+# gc: "-Xlog:gc*,gc+age=trace,safepoint:file={{ vitam_folder_log }}/gc.log:utctime,pid,tags:filecount=32,filesize=64m"
+# java: ""
+
+vitam:
+    accessinternal:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    accessexternal:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    elastickibanainterceptor:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    batchreport:
+          jvm_opts:
+              # memory: "-Xms512m -Xmx512m"
+              # gc: ""
+              # java: ""
+    ingestinternal:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    ingestexternal:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    metadata:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    ihm_demo:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    ihm_recette:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    logbook:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+        timer_jvm_opts:
+            # memory: "-Xms32m -Xmx128m"
+            # gc: ""
+            # java: ""
+    workspace:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    processing:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    worker:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    storageengine:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+        timer_jvm_opts:
+            # memory: "-Xms32m -Xmx128m"
+            # gc: ""
+            # java: ""
+    storageofferdefault:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    functional_administration:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+        timer_jvm_opts:
+            # memory: "-Xms32m -Xmx128m"
+            # gc: ""
+            # java: ""
+    security_internal:
+        jvm_opts:
+            # memory: "-Xms512m -Xmx512m"
+            # gc: ""
+            # java: ""
+    library:
+        jvm_opts:
+            memory: "-Xms32m -Xmx128m"
+            # gc: ""
+            # java: ""

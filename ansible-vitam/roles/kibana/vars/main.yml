@@ -1,0 +1,5 @@
+---
+
+kibana_service_name: kibana-{{ composant.groupe }}
+
+service_at_boot: "{{ vitam_defaults.services.at_boot | default(false) }}"

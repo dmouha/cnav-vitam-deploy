@@ -1,0 +1,72 @@
+---
+# tasks file for loadTNR
+- name: ensure TNR output file doesn't exist
+  file:
+    path: "{{ TNR_output }}"
+    state: absent
+
+- name: ihm-recette auth
+  uri:
+    method: POST
+    body: '{"token":{"principal":"{{ vitam_users[0].login }}","credentials": "{{ vitam_users[0].password }}" }}'
+    body_format: json
+    status_code: 200
+    headers:
+      Content-Type: "application/json;charset=utf-8"
+      accept: "application/json, text/plain, */*"
+      Connection: "keep-alive"
+      body_format: json
+      Host: "{{ ip_service }}"
+    url: "{% if vitam.ihm_recette.https_enabled==true %}https{% else %}http{% endif %}://{{ ip_service }}:{{ vitam.ihm_recette.port_service }}{{ vitam.ihm_recette.baseurl }}/v1/api/login"
+    validate_certs: no
+    timeout: "{{ vitam_defaults.services.api_call_timeout }}"
+    return_content: yes
+  ignore_errors: true
+  run_once: true
+  register: login
+  no_log: "{{ hide_passwords_during_deploy }}"
+
+- name: Purge database collections before launching TNR
+  uri:
+    method: DELETE
+    headers:
+      X-CSRF-Token: "{{ login.json.tokenCSRF }}"
+      X-Tenant-Id: "{{ item }}"
+      Cookie: "{{ login.set_cookie }}"
+    url: "{% if vitam.ihm_recette.https_enabled==true %}https{% else %}http{% endif %}://{{ ip_service }}:{{ vitam.ihm_recette.port_service }}{{ vitam.ihm_recette.baseurl }}/v1/api/delete/deleteTnr"
+    validate_certs: no
+    timeout: "{{ vitam_defaults.services.api_call_timeout }}"
+  # TNR are used on tenant 0 & 1 only
+  loop: "{{ tenant_to_clean_before_tnr | list }}"
+  ignore_errors: true
+  run_once: true
+  when: login.set_cookie != ''
+
+- name: Check if TNR tags file exists
+  local_action: stat path={{ inventory_dir }}/TNR_STRING.txt
+  register: stat_result
+
+- set_fact:
+    TNR_TAGS: "{{lookup('file', '{{ inventory_dir }}/TNR_STRING.txt') }}"
+  when: stat_result.stat.exists
+
+- name: launch TNR
+  shell: java -Dlogback.configurationFile="{{ TNR_conf }}/logback.xml" -DtnrBaseDirectory={{ TNR_dir }} -jar {{ TNR_lib }}/functional-test-*.jar -g fr.gouv.vitam.functionaltest.cucumber -p junit:{{ TNR_output }} -p fr.gouv.vitam.functionaltest.cucumber.report.VitamReporter:{{ report_dir }}/report_{{ ansible_date_time.year }}{{ ansible_date_time.month }}{{ ansible_date_time.day}}_{{ ansible_date_time.hour}}{{ ansible_date_time.minute}}{{ ansible_date_time.second}}.json -p html:{{ report_dir }}/cucumber-reports {{ TNR_dir }}
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  ignore_errors: true
+  args:
+    chdir: "{{ TNR_conf }}"
+  run_once: true
+  when: not stat_result.stat.exists
+
+- name: launch TNR by tag
+  include_tasks: "tnr_by_tag.yml"
+  when: stat_result.stat.exists
+
+- name: get back TNR output file {{ TNR_output }}
+  fetch:
+    src: "{{ TNR_output }}"
+    dest: "{{ inventory_dir }}/"
+    flat: yes
+  ignore_errors: true
+  run_once: true

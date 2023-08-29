@@ -1,0 +1,141 @@
+---
+
+### TODO : check if vitam_site_name is correct (ie a-zA-Z0-9\-_ )
+- name: check vitam_site_name is correctly set
+  fail: msg="{{ vitam_site_name }} not correctly configured"
+  when: vitam_site_name|regex_search('[^a-zA-Z0-9\\-]')
+
+- name: Install Consul package
+  package:
+    name: "{{ consul_service }}"
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  notify:
+    - "consul - restart service"
+
+- name: Install Consul-selinux package
+  package:
+    name: "{{ consul_service }}-selinux"
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  notify:
+    - "consul - restart service"
+  when:
+    - selinux_state | lower in ["enforcing", "permissive"]
+    - selinux_policy | lower == "targeted" # We don"t handle mls mode for now
+
+#### Configuration ####
+
+- name: Check that the consul directories exist
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/{{ item }}/consul"
+    state: directory
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+  with_items:
+    - app
+    - bin
+    - conf
+    - lib
+    - log
+    - data
+    - tmp
+  notify:
+    - "consul - restart service"
+
+- name: Deploy consul common configuration files
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ consul_folder_conf }}/{{ item }}"
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  with_items:
+    - "consul.json"
+  notify:
+      - "consul - restart service"
+
+# Ensure that the installation is complete and consul up before setting up the system-wide dns resolver...
+- meta: flush_handlers
+
+- name: Ensure consul service is started at boot
+  service:
+    name: "{{ consul_service }}"
+    enabled: "{{ consul.at_boot | default(service_at_boot) }}"
+    state: started
+
+# Changing the resolv.conf doesn't work into a docker container...
+- name: Add consul nameserver to resolv.conf
+  blockinfile:
+    backup: yes
+    dest: /etc/resolv.conf
+    insertbefore: BOF # necessary or this entry won't be asked
+    marker: "# {mark} ANSIBLE MANAGED BLOCK"
+    block: |
+      nameserver 127.0.0.1
+  when: inventory_hostname not in single_vm_hostnames
+
+- block:
+
+    # For Debian add nameserver 127.0.0.1 entry in /etc/resolvconf/resolv.conf.d/head
+    - name: Install resolvconf package
+      package:
+        name: "resolvconf"
+        state: latest
+      register: result
+      retries: "{{ packages_install_retries_number }}"
+      until: result is succeeded
+      delay: "{{ packages_install_retries_delay }}"
+
+    - name: Add nameserver entry in /etc/resolvconf/resolv.conf.d/head
+      blockinfile:
+        backup: yes
+        dest: /etc/resolvconf/resolv.conf.d/head
+        insertbefore: BOF
+        create: yes
+        block: |
+          nameserver 127.0.0.1
+
+    - name: Start the resolvconf service
+      systemd:
+        name: resolvconf
+        enabled: yes
+        state: started
+
+  when: ansible_os_family == "Debian" and ansible_virtualization_type != "docker"
+
+- block:
+
+    # For Centos Install a package which controls /etc/resolv.conf file
+    - name: Install vitam-resolvconf package
+      package:
+        name: "vitam-resolvconf"
+        state: latest
+      register: result
+      retries: "{{ packages_install_retries_number }}"
+      until: result is succeeded
+      delay: "{{ packages_install_retries_delay }}"
+
+    - name: Start the vitam-resolvconf service
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      with_items:
+        - vitam_dns_localhost_enforce.path
+        - vitam_dns_localhost_enforce.service
+
+  when: ansible_os_family == "RedHat" and ansible_virtualization_type != "docker"
+
+- name: Wait for consul port to be open
+  wait_for:
+    host: "127.0.0.1"
+    port: "53"
+    state: "started"

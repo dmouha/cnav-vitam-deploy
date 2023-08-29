@@ -1,0 +1,21 @@
+---
+
+- name: install siegfried package
+  package:
+    name: vitam-siegfried
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  notify:
+    - "siegfried - restart service"
+
+- name: Flush handlers
+  meta: flush_handlers
+
+- name: Ensure siegfried is started at boot
+  service:
+    name: vitam-siegfried
+    enabled: "{{ siegfried.at_boot | default(service_at_boot) }}"
+    state: started

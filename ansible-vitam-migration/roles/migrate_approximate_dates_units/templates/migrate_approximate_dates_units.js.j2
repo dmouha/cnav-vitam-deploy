@@ -1,0 +1,86 @@
+function bulkWriteUnits(idsUnit) {
+
+    var bulkUpdateOps = [];
+    var lifeCycles = db.getSiblingDB('logbook').LogbookLifeCycleUnit.find({
+            _id: {
+                $in: idsUnit
+
+            }
+        },
+        {
+            _id: true,
+            evDateTime: true,
+            "events": {
+                $slice: -1
+            }
+        }
+    ).forEach(function(lfc) {
+
+
+
+        bulkUpdateOps.push({
+            "updateOne": {
+                "filter": {
+                    "_id": lfc._id
+                },
+                "update": {
+                    $set: {
+                        _acd: lfc.evDateTime,
+                        _aud: lfc.events[0].evDateTime
+                    }
+                }
+            }
+
+        });
+
+
+    });
+
+    db.getSiblingDB('metadata').Unit.bulkWrite(bulkUpdateOps,{ordered : false});
+    print("number of items processed: "+counter);
+
+
+}
+
+
+
+var counter = 0,
+    chunk = 10000;
+
+var idsUnit = [];
+
+
+var units=db.getSiblingDB('metadata').Unit.find(
+
+    {
+        "_acd": {
+                    $exists: false
+        }
+        
+    }, {
+        _id: true
+    }
+);
+
+
+units.forEach(function(unit) {
+
+
+    counter++;
+    idsUnit.push(unit._id);
+
+    if (counter % chunk == 0) {
+
+        bulkWriteUnits(idsUnit);
+        idsUnit = [];
+    }
+
+
+
+})
+
+if (idsUnit.length > 0) {
+
+    bulkWriteUnits(idsUnit);
+
+}

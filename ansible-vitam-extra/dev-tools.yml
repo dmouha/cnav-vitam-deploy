@@ -1,0 +1,22 @@
+---
+
+### HOSTS NETWORK VARS CHECK ###
+- hosts: hosts
+  roles:
+    - checks
+
+- hosts: hosts_dev_tools
+  roles:
+    - {role: elasticsearch-head, when: "(inventory_hostname not in single_vm_hostnames) and (docker_install|lower == 'true')"}
+
+- hosts: hosts_mongos_data
+  roles:
+    - {role: mongo-express, when: "(inventory_hostname not in single_vm_hostnames) and (docker_install|lower == 'true')"}
+  vars:
+    group_name: "hosts_mongos_data"
+
+- hosts: hosts_mongos_offer
+  roles:
+    - {role: mongo-express, when: "(inventory_hostname not in single_vm_hostnames) and (docker_install|lower == 'true')"}
+  vars:
+    group_name: "hosts_mongos_offer"

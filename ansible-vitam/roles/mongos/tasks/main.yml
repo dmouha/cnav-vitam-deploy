@@ -1,0 +1,140 @@
+---
+- name: Install vitam-mongos package
+  package:
+    name: vitam-mongos
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  notify:
+    - "mongos - restart service"
+
+#### Configuration ####
+
+- name: Check that the directories exists (must be removed when the RPM plugin will be patched)
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/{{ item }}/mongos"
+    state: directory
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+  with_items:
+    - app
+    - bin
+    - conf
+    - data
+    - lib
+    - log
+    - script
+    - tmp
+  notify:
+    - "mongos - restart service"
+  tags:
+    - update_mongodb_configuration
+
+- name: Compute the mongoc server list
+  set_fact: mongoc_item="{{ item }}"
+  when:
+    - "mongo_cluster_name == hostvars[item]['mongo_cluster_name']"
+  with_items:
+    - "{{ groups[mongoc] }}"
+  register: mongoc_result
+  tags:
+    - update_mongodb_configuration
+
+- name: make a list from the result
+  set_fact:
+    mongoc_list: "{{ mongoc_result.results | remove_skipped_servers | map(attribute='ansible_facts.mongoc_item') | list }}"
+  tags:
+    - update_mongodb_configuration
+
+- name: Create the mongos configuration server file
+  template:
+    src: mongos.conf.j2
+    dest: "{{ mongo_config_path }}/mongos.conf"
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  notify:
+    - "mongos - restart service"
+  tags:
+    - update_mongodb_configuration
+
+- name: Enable logrotate for vitam-mongos
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/vitam-mongos
+    owner: root
+    group: root
+    mode: 0644
+  when: mongodb.logrotate | default('enabled') | lower == 'enabled'
+
+- name: Disable logrotate for vitam-mongos
+  file:
+    path: /etc/logrotate.d/vitam-mongos
+    state: absent
+  when: mongodb.logrotate | default('enabled') | lower == 'disabled'
+
+#### Consul configuration ####
+
+- name: Ensure consul config dir is OK
+  file:
+    path: "{{ consul_folder_conf }}"
+    state: directory
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+  tags:
+    - update_mongodb_configuration
+
+- name: Deploy consul agent service declaration
+  template:
+    src: "service-componentid.json.j2"
+    dest: "{{ consul_folder_conf }}/service-mongos.json"
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  tags:
+    - consul_conf
+    - update_mongodb_configuration
+  notify:
+   - "mongos - reload consul configuration"
+
+# Enable mongo passphrase
+- name: Copy the passphrase
+  template:
+    src: "keyfile.j2"
+    dest: "{{ mongo_config_path }}/keyfile"
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: 0600
+  tags:
+    - update_mongodb_configuration
+  notify:
+    - "mongos - reload consul configuration"
+
+# Ensure that the installation is complete and consul up before continuing...
+- meta: flush_handlers
+  tags:
+    - update_mongodb_configuration
+
+- name: Ensure {{ mongo_cluster_name }}-mongos service is started at boot
+  service:
+    name: vitam-mongos
+    enabled: "{{ mongodb.at_boot | default(service_at_boot) }}"
+    state: started
+
+- name: Wait for the {{ mongo_cluster_name }}-mongos port to be open
+  wait_for:
+    host: "{{ ip_service }}"
+    port: "{{ mongodb.mongos_port }}"
+    timeout: "{{ vitam_defaults.services.start_timeout }}"
+
+- name: Check {{ mongo_cluster_name }}-mongos service health in local consul agent
+  uri:
+    url: "http://{{ (inventory_hostname in groups['hosts_consul_server']) | ternary(hostvars[inventory_hostname][consul.network], '127.0.0.1') }}:8500/v1/agent/health/service/name/{{ mongo_cluster_name }}-mongos"
+  register: result
+  until:
+    - result.status is defined
+    - result.status == 200
+  retries: "{{ vitam_defaults.services.status_retries_number }}"
+  delay: "{{ vitam_defaults.services.status_retries_delay }}"

@@ -1,0 +1,25 @@
+
+// Add the shard to the configuration
+{% for host in groups[mongod] %}
+    {% if hostvars[host]['mongo_rs_bootstrap'] is defined and hostvars[host]['mongo_rs_bootstrap']|lower == "true" %}
+    {% if mongo_cluster_name == hostvars[host]['mongo_cluster_name'] %}
+        sh.addShard("shard{{ hostvars[host]['mongo_shard_id'] }}/{{ hostvars[host]['ip_service'] }}:{{ mongodb.mongod_port }}")
+    {% endif %}
+    {% endif %}
+{% endfor %}
+
+// Enable sharding on Vitam databases
+
+sh.enableSharding("metadata")
+sh.enableSharding("logbook")
+
+// Add the sharding key for the sharded collections
+
+sh.shardCollection("metadata.Unit"                                 ,{ _id: "hashed" })
+sh.shardCollection("metadata.ObjectGroup"                          ,{ _id: "hashed" })
+
+sh.shardCollection("logbook.LogbookOperation"                      ,{ _id: "hashed" })
+sh.shardCollection("logbook.LogbookLifeCycleUnit"                  ,{ _id: "hashed" })
+sh.shardCollection("logbook.LogbookLifeCycleObjectGroup"           ,{ _id: "hashed" })
+sh.shardCollection("logbook.LogbookLifeCycleUnitInProcess"         ,{ _id: "hashed" })
+sh.shardCollection("logbook.LogbookLifeCycleObjectGroupInProcess"  ,{ _id: "hashed" })

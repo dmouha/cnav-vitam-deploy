@@ -1,0 +1,10 @@
+---
+
+- hosts: hosts_ihm_recette
+  roles:
+    - test-perf-ingest
+  vars:
+    ingest_number: 5
+    sip_name: SIP_10000_100.zip
+    parallel: "false"
+    delay: 5000

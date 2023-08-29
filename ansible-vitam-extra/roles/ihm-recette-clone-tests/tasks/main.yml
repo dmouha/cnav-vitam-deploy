@@ -1,0 +1,160 @@
+---
+
+# tasks file for clone-tests
+- block:
+  - name: get repo for git lfs for CentOS
+    copy:
+      src: gitlfs-centos7.repo
+      dest: /etc/yum.repos.d/github_git-lfs.repo
+      owner: root
+      group: root
+      mode: 0640
+
+  - name: Make sure curl is installed to download GPG key (RedHat)
+    package:
+      name: curl
+      state: latest
+    register: result
+    retries: "{{ packages_install_retries_number }}"
+    until: result is succeeded
+    delay: "{{ packages_install_retries_delay }}"
+    when: ansible_os_family == "RedHat"
+
+  when: ansible_os_family == "RedHat"
+
+- block:
+
+  - name: install curl
+    apt:
+      name: curl
+      state: present
+    register: result
+    retries: "{{ packages_install_retries_number }}"
+    until: result is succeeded
+    delay: "{{ packages_install_retries_delay }}"
+
+  - name: get repo for git lfs for Debian
+    copy:
+      src: gitlfs-debian8.list
+      dest: /etc/apt/sources.list.d/github_git-lfs.list
+      owner: root
+      group: root
+      mode: 0640
+
+  - name: install package on Debian
+    package:
+      name: apt-transport-https
+      state: latest
+    register: result
+    retries: "{{ packages_install_retries_number }}"
+    until: result is succeeded
+    delay: "{{ packages_install_retries_delay }}"
+
+  - name: add GPG key
+    shell: "export https_proxy={{ http_proxy_environnement }} && curl -L 'https://packagecloud.io/github/git-lfs/gpgkey' 2> /dev/null | apt-key add -"
+    when: http_proxy_environnement is defined
+
+  - name: add GPG key
+    shell: "curl -L 'https://packagecloud.io/github/git-lfs/gpgkey' 2> /dev/null | apt-key add -"
+    when: http_proxy_environnement is undefined
+
+  - name: update apt cache
+    shell: apt-get update
+
+  when: ansible_os_family == "Debian"
+
+- name: install git-lfs
+  package:
+    name: git-lfs
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+
+- name: ensure subdir exist
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/data/ihm-recette/test-data/system"
+    state: directory
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+
+- name: create git repo
+  shell: "git clone --no-checkout {{ vitam_tests_gitrepo_url }} ."
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  environment:
+    http_proxy: "{{ http_proxy_environnement }}"
+    https_proxy: "{{ http_proxy_environnement }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+    creates: /vitam/data/ihm-recette/test-data/system/.git/
+
+- name: store auth
+  shell: "git config credential.helper 'store --file=/vitam/data/ihm-recette/test-data/system/.git/.git-credentials'"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+
+- name: copy git-credentials
+  template:
+    src: git-credentials.j2
+    dest: /vitam/data/ihm-recette/test-data/system/.git/.git-credentials
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  when: vitam_gitlab_itest_login is defined
+
+- name: initialize git lfs
+  shell: "git lfs install --local"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system
+
+- name: Set proxy conf in repo
+  shell: "git config http.proxy {{ http_proxy_environnement }}"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+  when:
+    - http_proxy_environnement is defined
+    - http_proxy_environnement != ''
+
+- name: ensure git repo is clean
+  shell: "git reset --hard && git clean -fd"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  become_method: sudo
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+
+- name: check whether data are already downloaded from git lfs
+  stat:
+      path: /vitam/data/ihm-recette/test-data/system/data/
+  register: git_pulled
+
+- name: fetch repo
+  shell: "git fetch"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+
+- name: Checkout
+  shell: "git checkout {{ vitam_tests_branch }}"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+
+- name: Check if branch
+  shell: "git show-ref --verify refs/remotes/origin/{{ vitam_tests_branch }}"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+  register: is_git_branch
+  ignore_errors: true
+
+- name: Pull branch
+  shell: "git reset --hard origin/{{ vitam_tests_branch }}"
+  become_user: "{{ vitam_defaults.users.vitam }}"
+  args:
+    chdir: /vitam/data/ihm-recette/test-data/system/
+  when: is_git_branch.rc == 0

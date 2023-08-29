@@ -1,0 +1,65 @@
+---
+
+#### Curator ####
+- name: install elasticsearch-curator package
+  package:
+    name: elasticsearch-curator
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  # when: "inventory_hostname not in single_vm_hostnames"
+
+- name: ensure Curator directories exist
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/{{ item }}/curator"
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    state: directory
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+  with_items:
+    - data
+    - log
+    - conf
+    - lib
+#  when: "inventory_hostname not in single_vm_hostnames"
+
+- name: apply configuration files for curator
+  template:
+    src: "{{ item }}.j2"
+    dest: "{{ curator_conf_dir }}/{{ item }}"
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  with_items:
+    - "curator.yml"
+    - "delete_index.yml"
+    - "close_index.yml"
+    - "metrics_index.yml"
+#  when: "inventory_hostname not in single_vm_hostnames"
+
+- name: copy the systemd unit & timer files for curator
+  template:
+    src: "{{ item }}"
+    dest: "/usr/lib/systemd/system/{{ item | basename | regex_replace('\\.j2$') }}"
+  with_fileglob:
+    - "{{ role_path }}/templates/systemd/*"
+  when: ansible_os_family == "RedHat"
+
+- name: copy the systemd unit & timer files for curator
+  template:
+    src: "{{ item }}"
+    dest: "/lib/systemd/system/{{ item | basename | regex_replace('\\.j2$') }}"
+  with_fileglob:
+    - "{{ role_path }}/templates/systemd/*"
+  when: ansible_os_family == "Debian"
+
+- name: Enable systemd timers
+  systemd:
+    name: "{{ item | basename | regex_replace('\\.j2$') }}"
+    daemon_reload: yes
+    enabled: "{{ curator.at_boot | default(service_at_boot) }}"
+    state: started
+  with_fileglob:
+    - "{{ role_path }}/templates/systemd/*.timer.j2"

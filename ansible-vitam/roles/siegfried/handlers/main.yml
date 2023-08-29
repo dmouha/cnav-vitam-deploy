@@ -1,0 +1,7 @@
+---
+
+- name: "siegfried - restart service"
+  systemd:
+    name: vitam-siegfried
+    state: restarted
+    daemon_reload: yes

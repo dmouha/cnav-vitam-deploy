@@ -1,0 +1,17 @@
+{
+  "service": {
+    "name": "prometheus-alertmanager",
+    "address": "{{ ip_admin }}",
+    "port": {{ prometheus.alertmanager.api_port | default(9093) }},
+    "enable_tag_override": false,
+    "tags": ["alertmanager"],
+    "checks": [
+      {
+        "name": "prometheus-alertmanager : TCP check",
+        "notes": "Status prometheus-alertmanager",
+        "tcp": "{{ ip_admin }}:{{ prometheus.alertmanager.api_port | default(9093) }}",
+        "interval": "{{ prometheus.check_consul | default(10) }}s"
+      }
+    ]
+  }
+}

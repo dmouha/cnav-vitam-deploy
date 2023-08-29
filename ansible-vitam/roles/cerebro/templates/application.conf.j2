@@ -1,0 +1,74 @@
+http.port = {{ cerebro.port }}
+http.address = {{ ip_admin }}
+# Secret will be used to sign session cookies, CSRF tokens and for other encryption utilities.
+# It is highly recommended to change this value before running cerebro in production.
+secret = "{{ cerebro.secret_key }}"
+
+# Application base path
+basePath = "/{{ cerebro.baseuri }}/"
+
+# Defaults to RUNNING_PID at the root directory of the app.
+# To avoid creating a PID file set this value to /dev/null
+pidfile.path = "/dev/null"
+
+# Rest request history max size per user
+rest.history.size = 50 // defaults to 50 if not specified
+
+# Path of local database file
+data.path = "{{ vitam_defaults.folder.root_path }}/data/cerebro/cerebro.db"
+
+# Authentication
+auth = {
+  # Example of LDAP authentication
+  #type: ldap
+    #settings: {
+      #url = "ldap://host:port"
+      #base-dn = "ou=active,ou=Employee"
+      #method  = "simple"
+      #user-domain = "domain.com"
+    #}
+{% if cerebro.basicauth is defined %}
+  # Simple username/password authentication
+  type: basic
+    settings: {
+      username = "{{ cerebro.basicauth.username }}"
+      password = "{{ cerebro.basicauth.password }}"
+    }
+{% else %}
+  # Example of simple username/password authentication
+  #type: basic
+    #settings: {
+      #username = "admin"
+      #password = "1234"
+    #}
+{% endif %}
+}
+
+# A list of known hosts
+hosts = [
+{% if groups['hosts_elasticsearch_log']|length > 0 %}
+  {
+    host = "http://{{ elasticsearch.log.host }}:{{ elasticsearch.log.port_http }}"
+    name = "{{ elasticsearch.log.cluster_name }}"
+  },
+{% endif %}
+{% if groups['hosts_elasticsearch_data']|length > 0 %}
+  {
+    host = "http://{{ elasticsearch.data.host }}:{{ elasticsearch.data.port_http }}"
+    name = "{{ elasticsearch.data.cluster_name }}"
+  },
+{% endif %}
+  #{
+  #  host = "http://localhost:9200"
+  #  name = "Some Cluster"
+  #},
+  # Example of host with authentication
+  #{
+  #  host = "http://some-authenticated-host:9200"
+  #  name = "Secured Cluster"
+  #  auth = {
+  #    username = "username"
+  #    password = "secret-password"
+  #  }
+  #}
+]

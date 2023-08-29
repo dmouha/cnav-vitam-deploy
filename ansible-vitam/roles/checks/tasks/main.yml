@@ -1,0 +1,27 @@
+---
+
+- import_tasks: check_removed_tenants.yml
+
+- import_tasks: check_elasticsearch_data_replicas.yml
+
+- import_tasks: check_ip.yml
+
+- import_tasks: check_java.yml
+
+- import_tasks: check_groups.yml
+  when: ansible_virtualization_type != 'docker'
+
+- import_tasks: check_single_vm.yml
+
+- include_tasks: check_consul.yml
+  when:  inventory_hostname in groups['vitam']
+
+- include_tasks: check_offers.yml
+  when:  inventory_hostname in groups['hosts_storage_offer_default']
+
+- import_tasks: check_strategies_offers.yml
+
+- include_tasks: check_offers_mongo.yml
+  when:  ( inventory_hostname in groups['hosts_storage_offer_default'] and ansible_virtualization_type != "docker" and inventory_hostname not in single_vm_hostnames )
+
+- import_tasks: check_offers_filesystem.yml

@@ -1,0 +1,374 @@
+---
+
+consul:
+    retry_interval: 10 # in seconds
+    check_interval: 10 # in seconds
+    check_timeout: 5 # in seconds
+    log_level: WARN # Available log_level are: TRACE, DEBUG, INFO, WARN or ERR
+    network: "ip_admin" # Which network to use for consul communications ? ip_admin or ip_service ?
+
+consul_remote_sites:
+    # wan contains the wan addresses of the consul server instances of the external vitam sites
+    # Exemple, if our local dc is dc1, we will need to set dc2 & dc3 wan conf:
+    # - dc2:
+    #   wan: ["10.10.10.10","1.1.1.1"]
+    # - dc3:
+    #   wan: ["10.10.10.11","1.1.1.1"]
+
+# Please uncomment and fill values if you want to connect VITAM to external SIEM
+# external_siem:
+#     host:
+#     port:
+
+elasticsearch:
+    log:
+        host: "elasticsearch-log.service.{{ consul_domain }}"
+        port_http: "9201"
+        groupe: "log"
+        baseuri: "elasticsearch-log"
+        cluster_name: "elasticsearch-log"
+        consul_check_http: 10 # in seconds
+        consul_check_tcp: 10 # in seconds
+        action_log_level: error
+        https_enabled: false
+        indices_fielddata_cache_size: '30%' # related to https://www.elastic.co/guide/en/elasticsearch/reference/7.6/modules-fielddata.html
+        indices_breaker_fielddata_limit: '40%' # related to https://www.elastic.co/guide/en/elasticsearch/reference/7.6/circuit-breaker.html#fielddata-circuit-breaker
+        dynamic_timeout: 30s
+        # default index template
+        index_templates:
+            default:
+                shards: 1
+                replica: 1
+            packetbeat:
+                shards: 5
+        log_appenders:
+            root:
+                log_level: "info"
+            rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "5GB"
+                max_files: "50"
+            deprecation_rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "1GB"
+                max_files: "10"
+                log_level: "warn"
+            index_search_slowlog_rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "1GB"
+                max_files: "10"
+                log_level: "warn"
+            index_indexing_slowlog_rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "1GB"
+                max_files: "10"
+                log_level: "warn"
+        # By default, is commented. Should be uncommented if ansible computes badly vCPUs number ;  values are associated vCPUs numbers ; please adapt to your configuration
+        # thread_pool:
+        #     index:
+        #         size: 2
+        #     get:
+        #         size: 2
+        #     search:
+        #         size: 2
+        #     write:
+        #         size: 2
+        #     warmer:
+        #         max: 2
+    data:
+        host: "elasticsearch-data.service.{{ consul_domain }}"
+        # default is 0.1 (10%) and should be quite enough in most cases
+        #index_buffer_size_ratio: "0.15"
+        port_http: "9200"
+        groupe: "data"
+        baseuri: "elasticsearch-data"
+        cluster_name: "elasticsearch-data"
+        consul_check_http: 10 # in seconds
+        consul_check_tcp: 10 # in seconds
+        action_log_level: debug
+        https_enabled: false
+        indices_fielddata_cache_size: '30%' # related to https://www.elastic.co/guide/en/elasticsearch/reference/6.5/modules-fielddata.html
+        indices_breaker_fielddata_limit: '40%' # related to https://www.elastic.co/guide/en/elasticsearch/reference/6.5/circuit-breaker.html#fielddata-circuit-breaker
+        dynamic_timeout: 30s
+        # default index template
+        index_templates:
+            default:
+                shards: 1
+                replica: 2
+        log_appenders:
+            root:
+                log_level: "info"
+            rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "5GB"
+                max_files: "50"
+            deprecation_rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "5GB"
+                max_files: "50"
+                log_level: "warn"
+            index_search_slowlog_rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "5GB"
+                max_files: "50"
+                log_level: "warn"
+            index_indexing_slowlog_rolling:
+                max_log_file_size: "100MB"
+                max_total_log_size: "5GB"
+                max_files: "50"
+                log_level: "warn"
+        # By default, is commented. Should be uncommented if ansible computes badly vCPUs number ;  values are associated vCPUs numbers ; please adapt to your configuration
+        # thread_pool:
+        #     index:
+        #         size: 2
+        #     get:
+        #         size: 2
+        #     search:
+        #         size: 2
+        #     write:
+        #         size: 2
+        #     warmer:
+        #         max: 2
+
+mongodb:
+    mongos_port: 27017
+    mongoc_port: 27018
+    mongod_port: 27019
+    mongo_authentication: "true"
+    host: "mongos.service.{{ consul_domain }}"
+    check_consul: 10 # in seconds
+    drop_info_log: false # Drop mongo (I)nformational log, for Verbosity Level of 0
+    # logs configuration
+    logrotate: enabled # or disabled
+    history_days: 30 # How many days to store logs if logrotate is set to 'enabled'
+
+logstash:
+    host: "logstash.service.{{ consul_domain }}"
+    user: logstash
+    port: 10514
+    rest_port: 20514
+    check_consul: 10 # in seconds
+    # logstash xms & xmx in Megabytes
+    # jvm_xms: 2048
+    # jvm_xmx: 2048
+    # workers_number: 4
+    log_appenders:
+        rolling:
+            max_log_file_size: "100MB"
+            max_total_log_size: "5GB"
+        json_rolling:
+            max_log_file_size: "100MB"
+            max_total_log_size: "5GB"
+
+# Prometheus params
+prometheus:
+    metrics_path: /admin/v1/metrics
+    check_consul: 10 # in seconds
+    prometheus_config_file_target_directory: # Set path where "prometheus.yml" file will be generated. Example: /tmp/
+    server:
+        port: 9090
+        tsdb_retention_time: "7d"
+        tsdb_retention_size: "5GB"
+    node_exporter:
+        enabled: true
+        port: 9101
+        metrics_path: /metrics
+    consul_exporter:
+        enabled: true
+        port: 9107
+        metrics_path: /metrics
+    alertmanager:
+        api_port: 9093
+        cluster_port: 9094
+        #receivers: # https://grafana.com/blog/2020/02/25/step-by-step-guide-to-setting-up-prometheus-alertmanager-with-slack-pagerduty-and-gmail/
+        #- name: "slack_alert"
+        #  slack_configs:
+        #  - api_url: "https://hooks.slack.com/services/xxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        #    channel: '#your_alert_channel'
+        #    send_resolved: true
+
+grafana:
+    check_consul: 10 # in seconds
+    http_port: 3000
+    proxy: false
+    grafana_datasources:
+      - name: "Prometheus"
+        type: "prometheus"
+        access: "proxy"
+        url: "http://prometheus-server.service.{{ consul_domain }}:{{ prometheus.server.port | default(9090) }}/prometheus"
+        basicAuth: false
+        editable: true
+      - name: "Prometheus AlertManager"
+        type: "camptocamp-prometheus-alertmanager-datasource"
+        access: "proxy"
+        url: "http://prometheus-alertmanager.service.{{ consul_domain }}:{{ prometheus.alertmanager.api_port | default(9093) }}"
+        basicAuth: false
+        editable: true
+        jsonData:
+          keepCookies: []
+          severity_critical: "4"
+          severity_high: "3"
+          severity_warning: "2"
+          severity_info: "1"
+    grafana_dashboards:
+      - name: 'vitam-dashboard'
+        orgId: 1
+        folder: ''
+        folderUid: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: "/etc/grafana/provisioning/dashboards"
+
+# Curator units: days
+curator:
+    log:
+        metrics:
+            close: 7
+            delete: 30
+        logstash:
+            close: 7
+            delete: 30
+        metricbeat:
+            close: 5
+            delete: 10
+        packetbeat:
+            close: 5
+            delete: 10
+
+kibana:
+    header_value: "reporting"
+    import_delay: 10
+    import_retries: 10
+    # logs configuration
+    logrotate: enabled # or disabled
+    history_days: 30 # How many days to store logs if logrotate is set to 'enabled'
+    log:
+        baseuri: "kibana_log"
+        api_call_timeout: 120
+        groupe: "log"
+        port: 5601
+        default_index_pattern: "logstash-vitam*"
+        check_consul: 10 # in seconds
+        # default shards & replica
+        shards: 1
+        replica: 0
+        # pour index logstash-*
+        metrics:
+            shards: 1
+            replica: 0
+        # pour index metricbeat-*
+        metricbeat:
+            shards: 3 # must be a factor of 30
+            replica: 0
+    data:
+        baseuri: "kibana_data"
+        # OMA : bugdette : api_call_timeout is used for retries ; should ceate a separate variable rather than this one
+        api_call_timeout: 120
+        groupe: "data"
+        port: 5601
+        default_index_pattern: "logbookoperation_*"
+        check_consul: 10 # in seconds
+        # index template for .kibana
+        shards: 1
+        replica: 0
+
+syslog:
+    # value can be syslog-ng or rsyslog
+    name: "rsyslog"
+
+cerebro:
+    baseuri: "cerebro"
+    port: 9000
+    check_consul: 10 # in seconds
+    # logs configuration
+    logrotate: enabled # or disabled
+    history_days: 30 # How many days to store logs if logrotate is set to 'enabled'
+
+siegfried:
+    port: 19000
+    consul_check: 10 # in seconds
+
+clamav:
+    port: 3310
+    # frequency freshclam for database update per day (from 0 to 24 - 24 meaning hourly check)
+    db_update_periodicity: 1
+    # logs configuration
+    logrotate: enabled # or disabled
+    history_days: 30 # How many days to store logs if logrotate is set to 'enabled'
+
+## Avast Business Antivirus for Linux
+## if undefined, the following default values are applied.
+# avast:
+#     # logs configuration
+#     logrotate: enabled # or disabled
+#     history_days: 30 # How many days to store logs if logrotate is set to 'enabled'
+#     manage_repository: true
+#     repository:
+#         state: present
+#         # For CentOS
+#         baseurl: http://rpm.avast.com/lin/repo/dists/rhel/release
+#         gpgcheck: no
+#         proxy: _none_
+#         # For Debian
+#         baseurl: 'deb http://deb.avast.com/lin/repo debian-buster release'
+#     vps_repository: http://linux-av.u.avcdn.net/linux-av/avast/x86_64
+#     ## List of sha256 hash of excluded files from antivirus. Useful for test environments.
+#     whitelist:
+#         - xxxxxx
+#         - yyyyyy
+
+mongo_express:
+    baseuri: "mongo-express"
+
+ldap_authentification:
+    ldap_protocol: "ldap"
+    ldap_server: "{% if groups['ldap']|length > 0 %}{{ groups['ldap']|first }}{% endif %}"
+    ldap_port: "389"
+    ldap_base: "dc=programmevitam,dc=fr"
+    ldap_login: "cn=Manager,dc=programmevitam,dc=fr"
+    uid_field: "uid"
+    ldap_userDn_Template: "uid={0},ou=people,dc=programmevitam,dc=fr"
+    ldap_group_request: "(&(objectClass=groupOfNames)(member={0}))"
+    ldap_admin_group: "cn=admin,ou=groups,dc=programmevitam, dc=fr"
+    ldap_user_group: "cn=user,ou=groups,dc=programmevitam, dc=fr"
+    ldap_guest_group: "cn=guest,ou=groups,dc=programmevitam, dc=fr"
+
+java_prerequisites:
+    debian: "openjdk-11-jre-headless"
+    redhat: "java-11-openjdk-headless"
+
+# Backup tool on storage-offer
+restic:
+    snapshot_retention: 30 # number of snapshots to keep
+    # default run backup at 23:00 everydays
+    cron:
+        minute: '00'
+        hour: '23'
+        day: '*'
+        month: '*'
+        weekday: '*'
+    # [hosts_storage_offer_default] must be able to connect to the listed databases below to properly backup.
+    backup:
+        # mongo-offer
+        - name: "{{ offer_conf }}"
+          type: mongodb
+          host: "{{ offer_conf }}-mongos.service.consul:{{ mongodb.mongos_port }}"
+          user: "{{ mongodb[offer_conf].admin.user }}"
+          password: "{{ mongodb[offer_conf].admin.password }}"
+        # # mongo-data (only if mono-sharded cluster)
+        # - name: mongo-data
+        #   type: mongodb
+        #   host: "mongo-data-mongos.service.consul:{{ mongodb.mongos_port }}"
+        #   user: "{{ mongodb['mongo-data'].admin.user }}"
+        #   password: "{{ mongodb['mongo-data'].admin.password }}"
+        # # mongo-vitamui (only if vitamui is deployed)
+        # - name: mongo-vitamui
+        #   type: mongodb
+        #   host: mongo-vitamui-mongod.service.consul:{{ mongodb.mongod_port }}
+        #   # Add the following params on environments/group_vars/all/vault-vitam.yml
+        #   # They can be found under vitamui's deployment sources on environments/group_vars/all/vault-mongodb.yml
+        #   user: "{{ mongodb['mongo-vitamui'].admin.user }}"
+        #   password: "{{ mongodb['mongo-vitamui'].admin.password }}"

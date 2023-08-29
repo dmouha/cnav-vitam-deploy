@@ -1,0 +1,219 @@
+---
+
+- name: Install vitam-mongod package
+  package:
+    name: vitam-mongod
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  notify:
+    - "mongod - restart service"
+
+#### Configuration ####
+
+- name: Check that the directories exists (must be removed when the RPM plugin will be patched)
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/{{ item }}/mongod"
+    state: directory
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+  with_items:
+    - app
+    - bin
+    - conf
+    - data
+    - lib
+    - log
+    - script
+    - tmp
+  notify:
+    - "mongod - restart service"
+  tags:
+    - update_mongodb_configuration
+
+- name: Create db directory
+  file:
+    path: "{{ mongo_db_path }}"
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+    state: directory
+  notify:
+    - "mongod - restart service"
+  tags:
+    - update_mongodb_configuration
+
+- name: Create the mongod configuration server file
+  template:
+    src: "mongod.conf.j2"
+    dest: "{{ mongo_config_path }}/mongod.conf"
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  notify:
+    - "mongod - restart service"
+  tags:
+    - update_mongodb_configuration
+
+- name: Enable logrotate for vitam-mongod
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/vitam-mongod
+    owner: root
+    group: root
+    mode: 0644
+  when: mongodb.logrotate | default('enabled') | lower == 'enabled'
+
+- name: Disable logrotate for vitam-mongod
+  file:
+    path: /etc/logrotate.d/vitam-mongod
+    state: absent
+  when: mongodb.logrotate | default('enabled') | lower == 'disabled'
+
+#### Consul configuration ####
+
+- name: Ensure consul config dir is OK
+  file:
+    path: "{{ consul_folder_conf }}"
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+    state: directory
+  tags:
+    - update_mongodb_configuration
+
+- name: Deploy consul agent service declaration
+  template:
+    src: "service-componentid.json.j2"
+    dest: "{{ consul_folder_conf }}/service-mongod.json"
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.conf_permission }}"
+  tags:
+    - consul_conf
+    - update_mongodb_configuration
+  notify:
+   - "mongod - reload consul configuration"
+
+# Enable mongo passphrase
+- name: Copy the passphrase
+  template:
+    src: "keyfile.j2"
+    dest: "{{ mongo_config_path }}/keyfile"
+    owner: "{{ vitam_defaults.users.vitamdb }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: 0600
+  tags:
+    - update_mongodb_configuration
+  notify:
+    - "mongod - reload consul configuration"
+
+# Ensure that the installation is complete and consul up before continuing...
+- meta: flush_handlers
+  tags:
+    - update_mongodb_configuration
+
+- name: Ensure {{ mongo_cluster_name }}-mongod service is started at boot
+  service:
+    name: vitam-mongod
+    enabled: "{{ mongodb.at_boot | default(service_at_boot) }}"
+    state: started
+
+- name: Wait for the {{ mongo_cluster_name }}-mongod port to be open
+  wait_for:
+    host: "{{ ip_service }}"
+    port: "{{ mongodb.mongod_port }}"
+    timeout: "{{ vitam_defaults.services.start_timeout }}"
+
+- name: Check {{ mongo_cluster_name }}-mongod service health in local consul agent
+  uri:
+    url: "http://{{ (inventory_hostname in groups['hosts_consul_server']) | ternary(hostvars[inventory_hostname][consul.network], '127.0.0.1') }}:8500/v1/agent/health/service/name/{{ mongo_cluster_name }}-mongod"
+  register: result
+  until:
+    - result.status is defined
+    - result.status == 200
+  retries: "{{ vitam_defaults.services.status_retries_number }}"
+  delay: "{{ vitam_defaults.services.status_retries_delay }}"
+
+#### Mongo online configuration ####
+# Note : mongodb needs to be started for these elements to succeed
+
+# Now let's initiate the replica set
+# Do this only on the first node of the current shard
+# We have to wait for all the node to be up
+
+# FIXME : Is it really OK to re-initiate mongod replica set during upgrades?
+- block:
+
+    - name: Wait for the service port to be open on all members of the replica
+      wait_for:
+        host: "{{ hostvars[item]['ip_service'] }}"
+        port: "{{ mongodb.mongod_port }}"
+        timeout: "{{ vitam_defaults.services.start_timeout }}"
+      when:
+        - "hostvars[item]['mongo_cluster_name'] == mongo_cluster_name"
+        - "hostvars[item]['mongo_shard_id'] == mongo_shard_id"
+      with_items: "{{ groups[group_name] }}"
+      tags:
+        - update_mongodb_configuration
+
+    - name: Copy the script which initiate the replica set
+      template:
+        src: "init-replica.js.j2"
+        dest: "{{ vitam_defaults.folder.root_path }}/app/mongod/init-replica.js"
+        owner: "{{ vitam_defaults.users.vitamdb }}"
+        group: "{{ vitam_defaults.users.group }}"
+        mode: "{{ vitam_defaults.folder.conf_permission }}"
+      tags:
+        - update_mongodb_configuration
+
+    - name: Copy script that restore configuration of mongod sharded cluster
+      template:
+        src: "restore-mongod.js.j2"
+        dest: "{{ vitam_defaults.folder.root_path }}/app/mongod/restore-mongod.js"
+        owner: "{{ vitam_defaults.users.vitamdb }}"
+        group: "{{ vitam_defaults.users.group }}"
+        mode: "{{ vitam_defaults.folder.conf_permission }}"
+      tags:
+        - update_mongodb_configuration
+
+    - name: Initiate the replica set
+      command: mongo --host {{ ip_service }} --port {{ mongodb.mongod_port }} {{ vitam_defaults.folder.root_path }}/app/mongod/init-replica.js
+      tags:
+        - update_mongodb_configuration
+
+    - name: Copy the script which fine tunes usage (PSsmin)
+      template:
+        src: "tune-usage.js.j2"
+        dest: "{{ vitam_defaults.folder.root_path }}/app/mongod/tune-usage.js"
+        owner: "{{ vitam_defaults.users.vitamdb }}"
+        group: "{{ vitam_defaults.users.group }}"
+        mode: "{{ vitam_defaults.folder.conf_permission }}"
+      tags:
+        - update_mongodb_configuration
+
+    - name: Apply tuning PSSmin
+      command: mongo --host {{ ip_service }} --port {{ mongodb.mongod_port }} {{ vitam_defaults.folder.root_path }}/app/mongod/tune-usage.js
+      tags:
+        - update_mongodb_configuration
+    # Create the local shard admin user
+
+    - name: Copy the script which create the local users
+      template:
+        src: "local-user.js.j2"
+        dest: "{{ vitam_defaults.folder.root_path }}/app/mongod/local-user.js"
+        owner: "{{ vitam_defaults.users.vitamdb }}"
+        group: "{{ vitam_defaults.users.group }}"
+        mode: "{{ vitam_defaults.folder.conf_permission }}"
+      tags:
+        - update_mongodb_configuration
+
+    - name: Create the local shard user
+      command: "mongo --host shard{{ mongo_shard_id }}/{{ ip_service}}:{{ mongodb.mongod_port }} {{ vitam_defaults.folder.root_path }}/app/mongod/local-user.js"
+      tags:
+        - update_mongodb_configuration
+
+  when: mongo_rs_bootstrap is defined and mongo_rs_bootstrap | lower == "true"

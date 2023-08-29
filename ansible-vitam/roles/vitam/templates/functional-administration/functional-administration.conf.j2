@@ -1,0 +1,74 @@
+
+# Configuration MongoDB
+mongoDbNodes:
+{% for host in groups['hosts_mongos_data'] %}
+- dbHost: {{ hostvars[host]['ip_service'] }}
+  dbPort: {{ mongodb.mongos_port }}
+{% endfor %}
+dbName: masterdata
+dbAuthentication: {{ mongodb.mongo_authentication }}
+dbUserName: {{ mongodb['mongo-data'].functionalAdmin.user }}
+dbPassword: {{ mongodb['mongo-data'].functionalAdmin.password }}
+
+#Basic Authentication
+adminBasicAuth:
+- userName: {{ admin_basic_auth_user }}
+  password: {{ admin_basic_auth_password }}
+
+jettyConfig: jetty-config.xml
+workspaceUrl: {{vitam.workspace | client_url}}
+processingUrl: {{vitam.processing | client_url}}
+
+# ElasticSearch
+clusterName: {{ vitam_struct.cluster_name }}
+elasticsearchNodes:
+{% for host in groups['hosts_elasticsearch_data'] %}
+- hostName: {{ hostvars[host]['ip_service'] }}
+  httpPort: {{ elasticsearch.data.port_http }}
+{% endfor %}
+
+# ElasticSearch tenant indexation
+elasticsearchTenantIndexation:
+  default_config:
+    number_of_shards: {{ vitam_elasticsearch_tenant_indexation.default_config.masterdata.number_of_shards }}
+    number_of_replicas: {{ vitam_elasticsearch_tenant_indexation.default_config.masterdata.number_of_replicas }}
+
+{% for collection in ["accesscontract", "accessionregisterdetail", "accessionregistersummary", "accessionregistersymbolic", "agencies", "archiveunitprofile", "context", "fileformat", "filerules", "griffin", "ingestcontract", "managementcontract", "ontology", "preservationscenario", "profile", "securityprofile"] %}
+{% if vitam_elasticsearch_tenant_indexation.masterdata[collection] is defined %}
+  {{collection}}:
+{% if vitam_elasticsearch_tenant_indexation.masterdata[collection].number_of_shards is defined %}
+    number_of_shards: {{ vitam_elasticsearch_tenant_indexation.masterdata[collection].number_of_shards }}
+{% endif %}
+{% if vitam_elasticsearch_tenant_indexation.masterdata[collection].number_of_replicas is defined %}
+    number_of_replicas: {{ vitam_elasticsearch_tenant_indexation.masterdata[collection].number_of_replicas }}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+# ExternalId configuration
+listEnableExternalIdentifiers:
+{% if vitam_tenants_usage_external is iterable %}
+{% for tenant in vitam_tenants_usage_external %}
+{% if tenant.identifiers is defined %}
+  {{ tenant.name }}:
+{% for external in tenant.identifiers %}
+    - {{ external }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+listMinimumRuleDuration:
+{% if vitam_tenant_rule_duration is iterable %}
+{% for tenant in vitam_tenant_rule_duration %}
+  {{ tenant.name }}:
+{% for rule in tenant.rules %}
+{% for key, value in rule.items() %}
+    {{ key }}: {{ value }}
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% endif %}
+
+accessionRegisterSymbolicThreadPoolSize: {{ vitam.functional_administration.accessionRegisterSymbolicThreadPoolSize}}
+ruleAuditThreadPoolSize: {{ vitam.functional_administration.ruleAuditThreadPoolSize}}

@@ -1,0 +1,128 @@
+var db = db.getSiblingDB('metadata')
+var counter = 0;
+var chunk = 10000;
+var bulkedUnitsQueries = [];
+var unitsToScan = db.Unit.find(
+    {
+        $or: [
+            { "_computedInheritedRules.StorageRule.EndDates": { $exists: true } },
+            { "_computedInheritedRules.AppraisalRule.EndDates": { $exists: true } },
+            { "_computedInheritedRules.DisseminationRule.EndDates": { $exists: true } },
+            { "_computedInheritedRules.AccessRule.EndDates": { $exists: true } },
+            { "_computedInheritedRules.ReuseRule.EndDates": { $exists: true } },
+            { "_computedInheritedRules.ClassificationRule.EndDates": { $exists: true } },
+            { "_computedInheritedRules.HoldRule.EndDates": { $exists: true } }
+        ]
+    },
+    {
+        "_id": 1,
+        "_computedInheritedRules": 1
+    }
+);
+
+unitsToScan.forEach(function (document) {
+    // StorageRule
+    if (document._computedInheritedRules.StorageRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.StorageRule.EndDates);
+        document._computedInheritedRules.StorageRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.StorageRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.StorageRule.Rules.push(computedRule);
+        }
+    }
+    // ApraisalRule
+    if (document._computedInheritedRules.AppraisalRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.AppraisalRule.EndDates);
+        document._computedInheritedRules.AppraisalRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.AppraisalRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.AppraisalRule.Rules.push(computedRule);
+        }
+    }
+    // DisseminationRule
+    if (document._computedInheritedRules.DisseminationRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.DisseminationRule.EndDates);
+        document._computedInheritedRules.DisseminationRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.DisseminationRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.DisseminationRule.Rules.push(computedRule);
+        }
+    }
+    // AccessRule
+    if (document._computedInheritedRules.AccessRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.AccessRule.EndDates);
+        document._computedInheritedRules.AccessRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.AccessRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.AccessRule.Rules.push(computedRule);
+        }
+    }
+    // ReuseRule
+    if (document._computedInheritedRules.ReuseRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.ReuseRule.EndDates);
+        document._computedInheritedRules.ReuseRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.ReuseRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.ReuseRule.Rules.push(computedRule);
+        }
+    }
+    // ClassificationRule
+    if (document._computedInheritedRules.ClassificationRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.ClassificationRule.EndDates);
+        document._computedInheritedRules.ClassificationRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.ClassificationRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.ClassificationRule.Rules.push(computedRule);
+        }
+    }
+    // HoldRule
+    if (document._computedInheritedRules.HoldRule.EndDates) {
+        var enDatesKeys = Object.keys(document._computedInheritedRules.HoldRule.EndDates);
+        document._computedInheritedRules.HoldRule.Rules = [];
+        for (var i = 0; i < enDatesKeys.length; i++) {
+            var computedRule = new Object();
+            computedRule.Rule = enDatesKeys[i];
+            computedRule.EndDate = document._computedInheritedRules.HoldRule.EndDates[enDatesKeys[i]];
+            document._computedInheritedRules.HoldRule.Rules.push(computedRule);
+        }
+    }
+
+    // Bulk insert stage
+    counter++;
+    bulkedUnitsQueries.push({
+        "updateOne": {
+            "filter": {
+                "_id": document._id
+            },
+            "update": {
+                $set: {
+                    _computedInheritedRules: document._computedInheritedRules
+                }
+            }
+        }
+
+    });
+    if (counter % chunk == 0) {
+        db.Unit.bulkWrite(bulkedUnitsQueries, { ordered: false });
+        print(bulkedUnitsQueries.length + " have been treated! Still in progress ...")
+        bulkedUnitsQueries = [];
+    }
+});
+
+// Process the rest of the data that was not in the batch size
+if (bulkedUnitsQueries.length > 0) {
+    db.Unit.bulkWrite(bulkedUnitsQueries, { ordered: false });
+    print(counter + "/" + unitsToScan.count() + " units have been treated in this script!")
+}

@@ -1,0 +1,324 @@
+<VirtualHost *:{{ reverse_proxy_port }}>
+
+    DocumentRoot "/var/www/html-{{ vitam_site_name }}"
+    ProxyPreserveHost {{ vitam_proxypreservehost | default('on') }}
+    ServerName {{ vitam_reverse_external_dns }}
+
+    # Enable SSL for the Reverse proxy
+    SSLProxyEngine on
+
+{% if vitam_reverse_external_protocol == "https" %}
+    # SSL
+    SSLEngine on
+    {% if ansible_os_family == "RedHat" %}
+    # according to http://blog.noizeramp.com/2010/10/03/apache-2-and-ssl-configuration/
+    SSLCertificateFile /etc/pki/tls/certs/localhost.crt
+    SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
+    {% endif %}
+    {% if ansible_os_family == "Debian" %}
+    # according to https://wiki.debian.org/Self-Signed_Certificate
+    SSLCertificateFile /etc/ssl/certs/ssl-cert-snakeoil.pem
+    SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key
+    {% endif %}
+{% endif %}
+
+    # Client certificate path
+    # Warning: Never uncomment the following line on production.
+    # Allow direct call to API by using reverse certificate (if configured on admin_context_certs list).
+    # SSLProxyMachineCertificateFile /etc/{{ apache_service }}/certs/keystore_client_{{ vitam_site_name }}.pem
+    # Client CA path
+    SSLProxyCACertificatePath /etc/{{ apache_service }}/ca/{{ vitam_site_name }}
+    # Don't check the CN of the server's certificate
+    SSLProxyCheckPeerCN off
+    # Don't check the hostname of the server
+    SSLProxyCheckPeerName off
+    KeepAlive Off
+
+    <Directory "/var/www/html-{{ vitam_site_name }}">
+        #
+        # Possible values for the Options directive are "None", "All",
+        # or any combination of:
+        #   Indexes Includes FollowSymLinks SymLinksifOwnerMatch ExecCGI MultiViews
+        #
+        # Note that "MultiViews" must be named *explicitly* --- "Options All"
+        # doesn't give it to you.
+        #
+        # The Options directive is both complicated and important.  Please see
+        # http://httpd.apache.org/docs/2.4/mod/core.html#options
+        # for more information.
+        #
+        Options Indexes FollowSymLinks
+
+        #
+        # AllowOverride controls what directives may be placed in .htaccess files.
+        # It can be "All", "None", or any combination of the keywords:
+        #   Options FileInfo AuthConfig Limit
+        #
+        AllowOverride None
+
+        #
+        # Controls who can get stuff from this server.
+        #
+        Require all granted
+    </Directory>
+
+    # External API for status (must be the first proxypass as ihms or API proxypass can use the same context and this one is more specific)
+    {% for host in (groups['hosts_collect'] | default([])) %}
+    ProxyPass /{{ vitam.collect.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.collect.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.collect.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.collect.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_access_internal'] %}
+    ProxyPass /{{ vitam.accessinternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.accessinternal.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.accessinternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.accessinternal.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_access_external'] %}
+    ProxyPass /{{ vitam.accessexternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.accessexternal.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.accessexternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.accessexternal.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_ingest_internal'] %}
+    ProxyPass /{{ vitam.ingestinternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ingestinternal.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.ingestinternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ingestinternal.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_ingest_external'] %}
+    ProxyPass /{{ vitam.ingestexternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ingestexternal.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.ingestexternal.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ingestexternal.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_metadata'] %}
+    ProxyPass /{{ vitam.metadata.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.metadata.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.metadata.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.metadata.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_ihm_demo'] %}
+    ProxyPass /{{ vitam.ihm_demo.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ihm_demo.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.ihm_demo.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ihm_demo.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_ihm_recette'] %}
+    ProxyPass /{{ vitam.ihm_recette.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ihm_recette.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.ihm_recette.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.ihm_recette.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_logbook'] %}
+    ProxyPass /{{ vitam.logbook.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.logbook.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.logbook.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.logbook.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_workspace'] %}
+    ProxyPass /{{ vitam.workspace.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.workspace.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.workspace.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.workspace.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_processing'] %}
+    ProxyPass /{{ vitam.processing.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.processing.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.processing.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.processing.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_worker'] %}
+    ProxyPass /{{ vitam.worker.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.worker.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.worker.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.worker.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_storage_engine'] %}
+    ProxyPass /{{ vitam.storageengine.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.storageengine.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.storageengine.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.storageengine.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_storage_offer_default'] %}
+    ProxyPass /{{ vitam.storageofferdefault.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.storageofferdefault.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.storageofferdefault.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.storageofferdefault.port_admin }}/admin/v1
+    {% endfor %}
+    {% for host in groups['hosts_functional_administration'] %}
+    ProxyPass /{{ vitam.functional_administration.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.functional_administration.port_admin }}/admin/v1 {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.functional_administration.baseuri }}{% if loop.index > 1 %}{{ loop.index }}{% endif %}/admin/v1 http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.functional_administration.port_admin }}/admin/v1
+    {% endfor %}
+
+    # IHM Demo
+    {% for host in groups['hosts_ihm_demo'] %}
+    ProxyPass /{{ vitam.ihm_demo.baseuri }} http{% if vitam.ihm_demo.https_enabled|lower == 'true' %}s{% endif %}://{{ hostvars[host]['ip_service'] }}:{{ vitam.ihm_demo.port_service }}/{{ vitam.ihm_demo.baseuri }} {{ reverse_connection_params }}
+    ProxyPassReverse  {{ vitam.ihm_demo.baseuri }} http{% if vitam.ihm_demo.https_enabled|lower == 'true' %}s{% endif %}://{{ hostvars[host]['ip_service'] }}:{{ vitam.ihm_demo.port_service }}/{{ vitam.ihm_demo.baseuri }}
+    {% endfor %}
+    # IHM Recette
+    {% for host in groups['hosts_ihm_recette'] %}
+    ProxyPass /{{ vitam.ihm_recette.baseuri }}  http{% if vitam.ihm_recette.https_enabled|lower == 'true' %}s{% endif %}://{{ hostvars[host]['ip_service'] }}:{{ vitam.ihm_recette.port_service }}/{{ vitam.ihm_recette.baseuri }} {{ reverse_connection_params }}
+    ProxyPassReverse  /{{ vitam.ihm_recette.baseuri }}  http{% if vitam.ihm_recette.https_enabled|lower == 'true' %}s{% endif %}://{{ hostvars[host]['ip_service'] }}:{{ vitam.ihm_recette.port_service }}/{{ vitam.ihm_recette.baseuri }}
+    {% endfor %}
+
+    # Enable chunked mode for all requests to access-external & ingest-external
+    <LocationMatch "^/(ingest|access|admin|collect)-external">
+        SetEnv proxy-sendchunked 1
+        SetEnv proxy-sendcl 0
+    </LocationMatch>
+
+    # External API collect
+    {% for host in (groups['hosts_collect'] | default([])) %}
+     ProxyPass /{{ vitam.collect.baseuri }} https://{{ hostvars[host]['ip_service'] }}:{{ vitam.collect.port_service }}/{{ vitam.collect.baseuri }} {{ reverse_connection_params }}
+     ProxyPassReverse  /{{ vitam.collect.baseuri}} https://{{ hostvars[host]['ip_service'] }}:{{ vitam.collect.port_service }}/{{ vitam.collect.baseuri }}
+    {% endfor %}
+
+    # External API for ingest-external
+    {% for host in groups['hosts_ingest_external'] %}
+     ProxyPass /{{ vitam.ingestexternal.baseuri }} https://{{ hostvars[host]['ip_service'] }}:{{ vitam.ingestexternal.port_service }}/{{ vitam.ingestexternal.baseuri }} {{ reverse_connection_params }}
+     ProxyPassReverse  /{{ vitam.ingestexternal.baseuri}} https://{{ hostvars[host]['ip_service'] }}:{{ vitam.ingestexternal.port_service }}/{{ vitam.ingestexternal.baseuri }}
+    {% endfor %}
+
+    # External API for access_external
+    {% for host in groups['hosts_access_external'] %}
+     ProxyPass /{{ vitam.accessexternal.baseuri}} https://{{ hostvars[host]['ip_service'] }}:{{ vitam.accessexternal.port_service }}/{{ vitam.accessexternal.baseuri}} {{ reverse_connection_params }}
+     ProxyPassReverse  /{{ vitam.accessexternal.baseuri}} https://{{ hostvars[host]['ip_service'] }}:{{ vitam.accessexternal.port_service }}/{{ vitam.accessexternal.baseuri}}
+     ProxyPass /admin-external  https://{{ hostvars[host]['ip_service'] }}:{{ vitam.accessexternal.port_service }}/admin-external {{ reverse_connection_params }}
+     ProxyPassReverse  /admin-external  https://{{ hostvars[host]['ip_service'] }}:{{ vitam.accessexternal.port_service }}/admin-external
+    {% endfor %}
+
+    # /vitam subdir browser
+    {% for host in groups['vitam'] %}
+    ProxyPass /nodes/{{ host }}/browse http://{{ hostvars[host]['ip_admin'] }}/browse  {{ reverse_connection_short_params }}
+    ProxyPassReverse  /nodes/{{ host }}/browse http://{{ hostvars[host]['ip_admin'] }}/browse
+    {% endfor %}
+
+    {% if groups['hosts_dev_tools']|length > 0 %}
+    # Mongo express
+    {% for host in mongo_express_hosts %}
+    ProxyPass /{{ mongo_express.baseuri }}-{{ hostvars[host]['mongo_cluster_name'] }} http://{{ hostvars[host]['ip_service'] }}:8081/{{ mongo_express.baseuri }}-{{ hostvars[host]['mongo_cluster_name'] }} {{ reverse_connection_short_params }}
+    ProxyPassReverse  /{{ mongo_express.baseuri }}-{{ hostvars[host]['mongo_cluster_name'] }} http://{{ hostvars[host]['ip_service'] }}:8081/{{ mongo_express.baseuri }}-{{ hostvars[host]['mongo_cluster_name'] }}
+    {% endfor %}
+    # Elasticsearch-head
+    ProxyPass /head http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/ {{ reverse_connection_short_params }}
+    ProxyPassReverse  /head http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/
+    ProxyPass /base http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/base {{ reverse_connection_short_params }}
+    ProxyPassReverse  /base http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/base
+    ProxyPass /app.css http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/app.css {{ reverse_connection_short_params }}
+    ProxyPassReverse  /app.css http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/app.css
+    ProxyPass /vendor.css http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/vendor.css {{ reverse_connection_short_params }}
+    ProxyPassReverse  /vendor.css http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/vendor.css
+    ProxyPass /i18n.js http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/i18n.js {{ reverse_connection_short_params }}
+    ProxyPassReverse  /i18n.js http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/i18n.js
+    ProxyPass /vendor.js http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/vendor.js {{ reverse_connection_short_params }}
+    ProxyPassReverse  /vendor.js http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/vendor.js
+    ProxyPass /app.js http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/app.js {{ reverse_connection_short_params }}
+    ProxyPassReverse  /app.js http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/app.js
+    ProxyPass /fonts http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/fonts {{ reverse_connection_short_params }}
+    ProxyPassReverse  /fonts http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/fonts
+    ProxyPass /lang http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/lang {{ reverse_connection_short_params }}
+    ProxyPassReverse  /lang http://{{ hostvars[groups['hosts_dev_tools'][0]]['ip_service'] }}:9100/lang
+    {% endif %}
+
+    {% if groups['hosts_kibana_log']|length >0 %}
+    # Kibana_log
+
+    ProxyPass /kibana_log/api/status http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/api/status {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_log/api/status http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/api/status
+
+    # Needed as it conflicts with Elasticsearch reverse proxy
+    ProxyPass /kibana_log/elasticsearch http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/elasticsearch {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_log/elasticsearch http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/elasticsearch
+
+    ProxyPass /kibana_log/app/kibana http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/app/kibana {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_log/app/kibana http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/app/kibana
+
+    ProxyPass /kibana_log/ http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/ {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_log http://{{ hostvars[groups['hosts_kibana_log'][0]]['ip_admin'] }}:{{ kibana.log.port }}/
+    {% endif %}
+
+    {% if groups['hosts_kibana_data']|length >0 %}
+    # Kibana_data
+
+    ProxyPass /kibana_data/api/status http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/api/status {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_data/api/status http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/api/status
+
+    # Needed as it conflicts with Elasticsearch reverse proxy
+    ProxyPass /kibana_data/elasticsearch http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/elasticsearch {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_data/elasticsearch http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/elasticsearch
+
+    ProxyPass /kibana_data/app/kibana http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/app/kibana {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_data/app/kibana http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/app/kibana
+
+    ProxyPass /kibana_data/ http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/ {{ reverse_connection_short_params }}
+    ProxyPassReverse /kibana_data http://{{ hostvars[groups['hosts_kibana_data'][0]]['ip_admin'] }}:{{ kibana.data.port }}/
+    {% endif %}
+
+    {% if groups['library']|length >0 %}
+    # Documentation
+    ProxyPass /{{ vitam.library.baseuri }} http://{{ hostvars[groups['library'][0]]['ip_service'] }}:{{ vitam.library.port_service }}/{{ vitam.library.baseuri }}
+    ProxyPassReverse /{{ vitam.library.baseuri }} http://{{ hostvars[groups['library'][0]]['ip_service'] }}:{{ vitam.library.port_service }}/{{ vitam.library.baseuri }}
+    {% endif %}
+
+    {% if groups['hosts_elasticsearch_log']|length >0 %}
+    # Elasticsearch
+    ProxyPass /_plugin http://{{ hostvars[groups['hosts_elasticsearch_log'][0]]['ip_admin'] }}:{{ elasticsearch.log.port_http }}/_plugin
+    ProxyPassReverse _plugin/ http://{{ hostvars[groups['hosts_elasticsearch_log'][0]]['ip_admin'] }}:{{ elasticsearch.log.port_http }}/_plugin
+    {% elif groups['hosts_elasticsearch_data']|length >0 %}
+    ProxyPass /_plugin http://{{ hostvars[groups['hosts_elasticsearch_data'][0]]['ip_admin'] }}:{{ elasticsearch.data.port_http }}/_plugin
+    ProxyPassReverse _plugin/ http://{{ hostvars[groups['hosts_elasticsearch_data'][0]]['ip_admin'] }}:{{ elasticsearch.data.port_http }}/_plugin
+    {% endif %}
+
+    {% if groups['hosts_cerebro']|length >0 %}
+    # Elasticsearch Cerebro
+    ProxyPass /{{ cerebro.baseuri }} http://{{ hostvars[groups['hosts_cerebro'][0]]['ip_admin'] }}:{{ cerebro.port }}/{{ cerebro.baseuri }}
+    ProxyPassReverse /{{ cerebro.baseuri }}/ http://{{ hostvars[groups['hosts_cerebro'][0]]['ip_admin'] }}:{{ cerebro.port }}/{{ cerebro.baseuri }}
+    {% endif %}
+
+    {% if groups['hosts_elasticsearch_log']|length >0 %}
+    # Elasticsearch log
+    ProxyPass /{{ elasticsearch.log.baseuri }} http://{{ hostvars[groups['hosts_elasticsearch_log'][0]]['ip_admin'] }}:{{ elasticsearch.log.port_http }}
+    ProxyPassReverse /{{ elasticsearch.log.baseuri }} http://{{ hostvars[groups['hosts_elasticsearch_log'][0]]['ip_admin'] }}:{{ elasticsearch.log.port_http }}
+    {% endif %}
+
+    {% if groups['hosts_elasticsearch_data']|length >0 %}
+    # Elasticsearch data ; no / at end as still in ES 2.x
+    ProxyPass /{{ elasticsearch.data.baseuri }} http://{{ hostvars[groups['hosts_elasticsearch_data'][0]]['ip_service'] }}:{{ elasticsearch.data.port_http }}
+    ProxyPassReverse /{{ elasticsearch.data.baseuri }} http://{{ hostvars[groups['hosts_elasticsearch_data'][0]]['ip_service'] }}:{{ elasticsearch.data.port_http }}
+    {% endif %}
+
+    {% if groups['hosts_consul_server']|length >0 %}
+    # Consul UI
+    ProxyPass /ui http://{{ hostvars[groups['hosts_consul_server'][0]]['ip_admin'] }}:8500/ui
+    ProxyPassReverse /ui http://{{ hostvars[groups['hosts_consul_server'][0]]['ip_admin'] }}:8500/ui
+    ProxyPass /v1 http://{{ hostvars[groups['hosts_consul_server'][0]]['ip_admin'] }}:8500/v1
+    ProxyPassReverse /v1 http://{{ hostvars[groups['hosts_consul_server'][0]]['ip_admin'] }}:8500/v1
+    {% endif %}
+
+    {% if groups['hosts_prometheus']|length >0 %}
+    # Prometheus server
+    ProxyPass /prometheus http://{{ hostvars[groups['hosts_prometheus'][0]]['ip_admin'] }}:{{ prometheus.server.port }}/prometheus
+    ProxyPassReverse /prometheus http://{{ hostvars[groups['hosts_prometheus'][0]]['ip_admin'] }}:{{ prometheus.server.port }}/prometheus
+    {% endif %}
+
+    {% if groups['hosts_grafana']|length >0 %}
+    # Grafana server
+    ProxyPass /grafana http://{{ hostvars[groups['hosts_grafana'][0]]['ip_admin'] }}:{{ grafana.http_port }}/grafana
+    ProxyPassReverse /grafana http://{{ hostvars[groups['hosts_grafana'][0]]['ip_admin'] }}:{{ grafana.http_port }}/grafana
+    {% endif %}
+
+    {% if groups['hosts_alertmanager']|length >0 %}
+    # Alertmanager server
+    ProxyPass /alertmanager http://{{ hostvars[groups['hosts_alertmanager'][0]]['ip_admin'] }}:{{ prometheus.alertmanager.api_port }}
+    ProxyPassReverse /alertmanager http://{{ hostvars[groups['hosts_alertmanager'][0]]['ip_admin'] }}:{{ prometheus.alertmanager.api_port }}
+    {% endif %}
+
+    # Metadata metrics
+    {% for host in groups['hosts_metadata'] %}
+    ProxyPass /nodes/{{ host }}/metadata/metrics http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.metadata.port_admin | default(28200) }}{{ prometheus.metrics_path | default('/admin/v1/metrics') }}
+    ProxyPassReverse /nodes/{{ host }}/metadata/metrics http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.metadata.port_admin | default(28200) }}{{ prometheus.metrics_path | default('/admin/v1/metrics') }}
+    {% endfor %}
+
+    # Processing metrics
+    {% for host in groups['hosts_processing'] %}
+    ProxyPass /nodes/{{ host }}/processing/metrics http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.processing.port_admin | default(28203) }}{{ prometheus.metrics_path | default('/admin/v1/metrics') }}
+    ProxyPassReverse /nodes/{{ host }}/processing/metrics http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.processing.port_admin | default(28203) }}{{ prometheus.metrics_path | default('/admin/v1/metrics') }}
+    {% endfor %}
+
+    # Storage Engine metrics
+    {% for host in groups['hosts_storage_engine'] %}
+    ProxyPass /nodes/{{ host }}/storage/metrics http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.storageengine.port_admin | default(29102) }}{{ prometheus.metrics_path | default('/admin/v1/metrics') }}
+    ProxyPassReverse /nodes/{{ host }}/storage/metrics http://{{ hostvars[host]['ip_admin'] }}:{{ vitam.storageengine.port_admin | default(29102) }}{{ prometheus.metrics_path | default('/admin/v1/metrics') }}
+    {% endfor %}
+
+    {% if prometheus.node_exporter.enabled | default(false) | bool == true %}
+    # Node Exporter metrics
+    {% for host in groups['vitam'] %}
+    ProxyPass /nodes/{{ host }}/node-exporter http://{{ hostvars[host]['ip_admin'] }}:{{ prometheus.node_exporter.port | default(9101) }}{{ prometheus.node_exporter.metrics_path | default('/metrics') }}
+    ProxyPassReverse /nodes/{{ host }}/node-exporter http://{{ hostvars[host]['ip_admin'] }}:{{ prometheus.node_exporter.port | default(9101) }}{{ prometheus.node_exporter.metrics_path | default('/metrics') }}
+    {% endfor %}
+    {% endif %}
+
+    {% if prometheus.consul_exporter.enabled | default(false) | bool == true %}
+    # Consul Exporter metrics
+    {% for host in groups['vitam'] %}
+    ProxyPass /nodes/{{ host }}/consul-exporter http://{{ hostvars[host]['ip_admin'] }}:{{ prometheus.consul_exporter.port | default(9107) }}{{ prometheus.consul_exporter.metrics_path | default('/metrics') }}
+    ProxyPassReverse /nodes/{{ host }}/consul-exporter http://{{ hostvars[host]['ip_admin'] }}:{{ prometheus.consul_exporter.port | default(9107) }}{{ prometheus.consul_exporter.metrics_path | default('/metrics') }}
+    {% endfor %}
+    {% endif %}
+
+</VirtualHost>

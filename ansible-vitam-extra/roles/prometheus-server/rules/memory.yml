@@ -1,0 +1,19 @@
+groups:
+  - name: memory
+    rules:
+      - alert: HighMemoryUsage
+        expr: (100 - ((node_memory_MemAvailable_bytes * 100) / node_memory_MemTotal_bytes)) > 75
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Instance {{ $labels.hostname }} has high memory usage"
+          description: "Instance {{ $labels.hostname }} has been using at least 75% of its RAM for more than 10 minutes"
+      - alert: HighMemoryUsage
+        expr: (100 - ((node_memory_MemAvailable_bytes * 100) / node_memory_MemTotal_bytes)) > 90
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.hostname }} has critically high memory usage"
+          description: "Instance {{ $labels.hostname }} has been using at least 90% of its RAM for more than 10 minutes"

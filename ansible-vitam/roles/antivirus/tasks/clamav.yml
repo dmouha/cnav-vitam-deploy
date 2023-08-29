@@ -1,0 +1,185 @@
+---
+# TODO: clean up the list (hint : ensure everything is really used ... I fear not.).
+- name: install ClamAV packages
+  package:
+    name: clamav,clamav-update,clamd,clamav-data,clamav-filesystem,clamav-devel,clamav-lib
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  when: ansible_os_family == "RedHat"
+
+- name: install ClamAV packages
+  package:
+    name: clamav,clamav-freshclam,clamav-base,clamav-daemon,clamav-unofficial-sigs
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  when: ansible_os_family == "Debian"
+
+- name: Adding {{ vitam_defaults.users.group }} group to clamav so it can scan {{ vitam_defaults.users.group }}-based files
+  user:
+    name: clamav
+    groups: "{{ vitam_defaults.users.group }}"
+    append: yes
+
+- name: ensure clam.d directory exists
+  file:
+    path: /etc/clamd.d
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  when: ansible_os_family == "RedHat"
+
+- name: ensure clamav log directory exists
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/log/clamav"
+    state: directory
+    owner: "{{ vitam_defaults.users.vitam }}"
+    group: "{{ vitam_defaults.users.group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission }}"
+
+- name: apply custom config file for clamAV
+  template:
+    src: clamav/scan.conf.j2
+    dest: /etc/clamd.d/scan.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - restart clamav
+  when: ansible_os_family == "RedHat"
+
+- name: apply custom config file for clamAV
+  template:
+    src: clamav/scan.conf.j2
+    dest: /etc/clamav/clamd.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - restart clamav
+  when: ansible_os_family == "Debian"
+
+- name: Enable logrotate for clamAV
+  template:
+    src: clamav/logrotate.j2
+    dest: /etc/logrotate.d/clamav
+    owner: root
+    group: root
+    mode: 0644
+  when: clamav.logrotate | default('enabled') | lower == 'enabled'
+
+- name: Disable logrotate for clamAV
+  file:
+    path: /etc/logrotate.d/clamav
+    state: absent
+  when: clamav.logrotate | default('enabled') | lower == 'disabled'
+
+- block:
+
+  - name: ensure clamAV daemon is started at boot
+    systemd:
+      name: "clamd@scan"
+      enabled: "{{ clamav.at_boot | default(service_at_boot) }}"
+      state: started
+
+  - name: active clamav updates
+    replace:
+      path: "/etc/sysconfig/freshclam"
+      regexp: '^FRESHCLAM_DELAY(.)*'
+      replace: '#FRESHCLAM_DELAY\1'
+
+  - name: change check periodicity for clamAV database updates
+    lineinfile:
+      path: "/etc/freshclam.conf"
+      regexp: '^[# \t]*Checks'
+      line: "Checks {{ clamav.db_update_periodicity }}"
+
+  when: ansible_os_family == "RedHat"
+
+- block:
+
+  - name: Temporarily stop clamav-daemon service to safely create clamav-daemon.socket
+    systemd:
+      name: clamav-daemon
+      state: stopped
+
+  - name: Make sure /var/run/clamav exists
+    file:
+      name: /var/run/clamav
+      state: directory
+      owner: clamav
+      group: root
+
+  # cf. https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=771911
+  - name: apply systemD config file for clamAV under debian
+    template:
+      src: clamav/clamav-daemon.socket.j2
+      dest: /etc/systemd/system/clamav-daemon.socket
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Enable clamav-daemon.socket at boot & service is started
+    systemd:
+      name: clamav-daemon.socket
+      daemon_reload: yes
+      enabled: "{{ clamav.at_boot | default(service_at_boot) }}"
+      state: restarted
+
+  - name: stop clamav-freshclam service to force update
+    systemd:
+      name: clamav-freshclam
+      daemon_reload: yes
+      enabled: "{{ clamav.at_boot | default(service_at_boot) }}"
+      state: stopped
+
+  - name: Add proxy directives to download databases when proxy is defined
+    blockinfile:
+      backup: yes
+      dest: /etc/clamav/freshclam.conf
+      insertbefore: EOF # necessary or this entry won't be asked
+      marker: "# {mark} ANSIBLE MANAGED BLOCK"
+      block: |
+        HTTPProxyServer {{ http_proxy_environnement | urlsplit('hostname') }}
+        HTTPProxyPort {{ http_proxy_environnement | urlsplit('port') }}
+    when:
+      - http_proxy_environnement is defined
+      - http_proxy_environnement != ''
+
+  - name: update database for clamAV
+    shell: freshclam
+    ignore_errors: true
+    notify:
+      - restart clamav
+
+  - name: restart clamav-freshclam service
+    systemd:
+      name: clamav-freshclam
+      enabled: "{{ clamav.at_boot | default(service_at_boot) }}"
+      state: started
+
+  - name: restart clamav-daemon service
+    systemd:
+      name: clamav-daemon
+      daemon_reload: yes
+      enabled: "{{ clamav.at_boot | default(service_at_boot) }}"
+      state: restarted
+
+  - name: change check periodicity for clamAV database updates
+    lineinfile:
+      path: "/etc/clamav/freshclam.conf"
+      regexp: '^[# \t]*Checks'
+      line: "Checks {{ clamav.db_update_periodicity }}"
+
+# - name: restart clamav-daemon.socket service
+#   systemd:
+#     name: clamav-daemon
+#     state: restarted
+
+  when: ansible_os_family == "Debian"

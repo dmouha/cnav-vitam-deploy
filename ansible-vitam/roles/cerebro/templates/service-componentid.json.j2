@@ -1,0 +1,17 @@
+{
+  "service": {
+    "name": "cerebro",
+    "port": {{ cerebro.port }},
+    "address": "{{ ip_admin }}",
+    "enable_tag_override": false,
+    "tags": ["tools"],
+    "checks": [
+      {
+        "name": "cerebro : HTTP check",
+        "notes": "HTTP status check",
+        "http": "http://{{ ip_admin }}:{{ cerebro.port }}/{{ cerebro.baseuri }}/",
+        "interval": "{{ cerebro.check_consul }}s"
+      }
+    ]
+  }
+}

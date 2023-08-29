@@ -1,0 +1,37 @@
+# mongoc.conf
+
+# for documentation of all options, see:
+#   http://docs.mongodb.org/manual/reference/configuration-options/
+
+# where to write logging data.
+systemLog:
+  destination: file
+  syslogFacility: local0
+  verbosity: {{ mongodb.verbosity | default(0) }}
+  traceAllExceptions: {{ mongodb.trace_all_exceptions | default('false') }}
+  logAppend: true
+  logRotate: reopen
+  path: {{ mongo_folder_log }}/mongoc.log
+
+# Where and how to store data.
+storage:
+  dbPath: {{ mongo_db_path }}
+  directoryPerDB: true
+
+# network interfaces
+net:
+  port: {{ mongodb.mongoc_port }}
+  bindIp: {{ ip_service }}{% if groups['hosts_dev_tools'] | length > 0 and ip_service != ip_admin %},{{ ip_admin }}{% endif %}
+
+  unixDomainSocket:
+    enabled: true
+    pathPrefix: {{ mongo_tmp_path }}
+    filePermissions: 0700
+
+# operationProfiling:
+replication:
+  replSetName: configsvr # name of the replica set
+  enableMajorityReadConcern: true
+
+sharding:
+  clusterRole: configsvr # role du shard

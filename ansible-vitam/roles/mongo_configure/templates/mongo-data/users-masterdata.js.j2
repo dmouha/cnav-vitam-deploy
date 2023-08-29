@@ -1,0 +1,55 @@
+
+// Switch to masterdata database
+db = db.getSiblingDB('masterdata')
+
+// Create functional-admin user
+
+if (! db.getUser("{{ mongodb[mongo_cluster_name].functionalAdmin.user }}")) {
+    db.createUser(
+        {
+            user: "{{ mongodb[mongo_cluster_name].functionalAdmin.user }}",
+            pwd: "{{ mongodb[mongo_cluster_name].functionalAdmin.password }}",
+            roles: [
+                { role: "readWrite", db: "masterdata" }
+            ]
+        }
+    )
+}
+else {
+    db.updateUser(
+        "{{ mongodb[mongo_cluster_name].functionalAdmin.user }}",
+        {
+            pwd: "{{ mongodb[mongo_cluster_name].functionalAdmin.password }}",
+            roles: [
+                { role: "readWrite", db: "masterdata" }
+            ]
+        }
+    )
+}
+
+// Create admin user
+
+if (! db.getUser("{{ mongodb[mongo_cluster_name].admin.user }}")) {
+    db.createUser(
+        {
+            user: "{{ mongodb[mongo_cluster_name].admin.user }}",
+            pwd: "{{ mongodb[mongo_cluster_name].admin.password }}",
+            roles: [
+                { role: "readWrite", db: "masterdata" },
+                { role: "dbAdmin", db: "masterdata" }
+            ]
+        }
+    )
+}
+else {
+    db.updateUser(
+        "{{ mongodb[mongo_cluster_name].admin.user }}",
+        {
+            pwd: "{{ mongodb[mongo_cluster_name].admin.password }}",
+            roles: [
+                { role: "readWrite", db: "masterdata" },
+                { role: "dbAdmin", db: "masterdata" }
+            ]
+        }
+    )
+}

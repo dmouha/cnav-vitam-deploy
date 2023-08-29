@@ -1,0 +1,31 @@
+---
+
+- name: Cleanup plugins directory
+  file:
+    path: "{{ grafana_data_dir }}/plugins"
+    state: absent
+
+- name: Create plugins directory
+  file:
+    path: "{{ grafana_data_dir }}/plugins"
+    state: directory
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: "{{ vitam_defaults.folder.folder_permission | default('0750') }}"
+
+- name: Install unzip package
+  package:
+    name: unzip
+    state: present
+  register: result
+  retries: "{{ packages_install_retries_number | default(1) }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay | default(10) }}"
+
+- name: Install plugins
+  unarchive:
+    src: "{{ item }}"
+    dest: "{{ grafana_data_dir }}/plugins"
+  with_fileglob:
+    - "{{ role_path }}/files/plugins/*.zip"
+  notify: "grafana - restart service"

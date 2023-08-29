@@ -1,0 +1,13 @@
+---
+
+- name: restart clamav
+  systemd:
+    name: "{{ clamav_service_name }}"
+    state: restarted
+    daemon_reload: yes
+
+- name: restart avast
+  systemd:
+    name: avast
+    state: restarted
+    daemon_reload: yes

@@ -1,0 +1,115 @@
+---
+
+- name: Set apache service name for CentOS
+  set_fact:
+    apache_service: "httpd"
+    apache_conf_dir: "conf.d"
+    apache_user: "apache"
+    apache_group: "apache"
+  when: ansible_os_family == "RedHat"
+
+- name: Set apache service name for Debian
+  set_fact:
+    apache_service: "apache2"
+    apache_conf_dir: "sites-available"
+    apache_user: "www-data"
+    apache_group: "root"
+  when: ansible_os_family == "Debian"
+
+- name: Install vitam user for /vitam browser access rights
+  package:
+    name: vitam-user-vitam
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+
+
+- name: install apache web server
+  package:
+    name: "{{ apache_service }}"
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+
+# TODO : idéalement, Apache ne devrait écouter que sur l'IP d'admin
+
+- name: Ensure Apache autostart && Apache is started
+  service:
+    name: "{{ apache_service }}"
+    enabled: yes
+    state: started
+
+- name: add vitam group to apache user
+  user:
+    name: "{{ apache_user }}"
+    groups: "{{ vitam_defaults.users.group }}"
+
+- name: copy theme files
+  copy:
+    src: ".theme"
+    dest: "{{ vitam_defaults.folder.root_path }}"
+    owner: "root"
+    mode: 0644
+  notify: "vitam_browser - restart apache"
+
+- name: add configuration file for mapping on Centos # + notify httpd restart
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/{{ apache_service }}/{{ apache_conf_dir }}/{{ item }}"
+    mode: 0500
+    owner: root
+  when: ansible_os_family == "RedHat"
+  notify: "vitam_browser - restart apache"
+  with_items:
+  - "httpd-offer-view.conf"
+  - "security.conf"
+
+- name: add configuration file for mapping on Debian # + notify httpd restart
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/{{ apache_service }}/{{ apache_conf_dir }}/{{ item }}"
+    mode: 0500
+    owner: root
+  when: ansible_os_family == "Debian"
+  notify: "vitam_browser - restart apache"
+  with_items:
+  - "httpd-offer-view.conf"
+  - "security.conf"
+
+- name: activate offer view in Debian only
+  file:
+    src: '/etc/{{ apache_service }}/{{ apache_conf_dir }}/{{ item }}'
+    dest: '/etc/{{ apache_service }}/sites-enabled/{{ item }}'
+    state: link
+  when: ansible_os_family == "Debian"
+  notify: "vitam_browser - restart apache"
+  with_items:
+  - "httpd-offer-view.conf"
+  - "security.conf"
+
+- block:
+
+    - name: Make sure /vitam/conf/offer directory exists & don't modify initial permissions
+      file:
+        path: "{{ vitam_defaults.folder.root_path }}/conf/offer/"
+        state: "directory"
+      tags:
+        - htaccess
+
+    - name: apply .htaccess to hide some files
+      copy:
+        src: .htaccess
+        dest: "{{ vitam_defaults.folder.root_path }}/conf/offer/.htaccess"
+        owner: "{{ vitam_defaults.users.vitam }}"
+        group: "{{ vitam_defaults.users.group }}"
+        mode: "{{ vitam_defaults.folder.conf_permission }}"
+      tags:
+        - htaccess
+
+  when:
+    - inventory_hostname in groups['hosts_storage_offer_default']
+    - vitam_offers[hostvars[inventory_hostname]['offer_conf']]['provider'] not in ['filesystem-hash','tape-library']

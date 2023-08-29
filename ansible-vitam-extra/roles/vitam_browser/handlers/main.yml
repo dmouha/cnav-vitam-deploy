@@ -1,0 +1,6 @@
+---
+
+- name: "vitam_browser - restart apache"
+  service:
+    name: "{{ apache_service }}"
+    state: restarted

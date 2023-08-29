@@ -1,0 +1,136 @@
+---
+
+vitam_additional_securityprofiles:
+  - name: POSTMAN-ProfilSecurite
+    identifier: PS-002 # manadatory, cannot be naither null nor blank
+    hasFullAccess: false # true/false
+    permissions:
+      - contexts:create:json
+      - contexts:read
+      - contexts:id:read
+      - contexts:id:update
+      - ingestcontracts:create:json
+      - ingestcontracts:read
+      - ingestcontracts:id:read
+      - ingestcontracts:id:update
+      - accesscontracts:create:json
+      - accesscontracts:read
+      - accesscontracts:id:read
+      - accesscontracts:id:update
+      - managementcontracts:create:json
+      - managementcontracts:read
+      - managementcontracts:id:read
+      - managementcontracts:id:update
+      - securityprofiles:create:json
+      - securityprofiles:read
+      - securityprofiles:id:read
+      - securityprofiles:id:update
+      - ontologies:create:json
+      - ontologies:read
+      - ontologies:id:read:json
+      - archiveunitprofiles:create:binary
+      - archiveunitprofiles:create:json
+      - archiveunitprofiles:read
+      - archiveunitprofiles:id:read:json
+      - archiveunitprofiles:id:update:json
+      - profiles:create:binary
+      - profiles:create:json
+      - profiles:read
+      - profiles:id:update:binaire
+      - profiles:id:read:binary
+      - profiles:id:read:json
+      - profiles:id:update:json
+      - formats:create
+      - formats:read
+      - formats:id:read
+      - formatsfile:check
+      - rules:read
+      - rulesfile:check
+      - rules:id:read
+      - rulesreport:id:read
+      - rulesreferential:id:read
+      - agenciesfile:check
+      - agencies:id:read
+      - agencies:read
+      - agenciesreferential:id:read
+      - ingests:id:archivetransfertreply:read
+      - ingests:id:manifests:read
+      - ingests:create
+      - ingests:local:create
+      - accessionregisters:read
+      - accessionregisters:id:accessionregisterdetails:read
+      - accessionregisterssymbolic:read
+      - accessionregisterdetails:read
+      - units:read
+      - unitsWithInheritedRules:read
+      - computeInheritedRules:action
+      - computeInheritedRules:delete
+      - unitsWithInheritedRules:read
+      - objects:read
+      - units:id:read:json
+      - units:id:update
+      - units:update
+      - units:rules:update
+      - units:update:revert
+      - units:bulk:update
+      - distributionreport:id:read
+      - reclassification:update
+      - units:id:objects:read:json
+      - units:id:objects:read:binary
+      - dipexport:create
+      - dipexport:id:dip:read
+      - logbookoperations:create
+      - logbookoperations:read
+      - logbookunitlifecycles:id:read
+      - logbookobjectslifecycles:id:read
+      - logbookoperations:id:read
+      - storageaccesslog:read:binary
+      - traceability:id:read
+      - traceabilitychecks:create
+      - traceabilitylinkedchecks:create
+      - probativevalue:create
+      - audits:create
+      - evidenceaudit:check
+      - rectificationaudit:check
+      - batchreport:id:read
+      - referentialaudit:check
+      - elimination:analysis
+      - elimination:action
+      - batchreport:id:read
+      - objects:deleteGotVersions
+      - transfers:create
+      - transfers:id:sip:read
+      - transfers:reply
+      - griffins:create
+      - griffins:read
+      - preservationScenarios:create
+      - preservationScenarios:read
+      - preservation:update
+      - operations:read
+      - operations:id:read:status
+      - operations:id:read
+      - operations:id:update
+      - operations:id:delete
+      - workflows:read
+      - forcepause:check
+      - removeforcepause:check
+      - reindex:create
+      - switchindex:create
+    contexts:
+      - name: POSTMAN-ContexteApplicatif
+        identifier: CT-002
+        status: ACTIVE
+        enable_control: true
+        permissions: "[ { \"tenant\": 2, \"AccessContracts\": ['AC-000002'], \"IngestContracts\": [] }, { \"tenant\": 3, \"AccessContracts\": ['AC-000002'], \"IngestContracts\": [] }, { \"tenant\": 4, \"AccessContracts\": ['AC-000002'], \"IngestContracts\": [] }, { \"tenant\": 5, \"AccessContracts\": ['AC-000002'], \"IngestContracts\": [] } ]"
+        certificates: ['external/postman.crt']
+  - name: GEDV
+    identifier: PS-003 # manadatory, cannot be naither null nor blank
+    hasFullAccess: true # true/false
+    permissions: "null"
+    contexts:
+      - name: GEDV-ContexteApplicatif
+        identifier: CT-003
+        status: ACTIVE
+        enable_control: true
+        permissions: "[ { \"tenant\": 2, \"AccessContracts\": ['AC-000001'], \"IngestContracts\": ['IC-000001'] }, { \"tenant\": 3, \"AccessContracts\": ['AC-000001'], \"IngestContracts\": ['IC-000001'] }, { \"tenant\": 4, \"AccessContracts\": ['AC-000001'], \"IngestContracts\": ['IC-000001'] }, { \"tenant\": 5, \"AccessContracts\": ['AC-000001'], \"IngestContracts\": ['IC-000001'] } ]"
+        certificates: ['external/gedv.crt']

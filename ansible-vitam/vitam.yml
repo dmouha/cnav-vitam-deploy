@@ -1,0 +1,399 @@
+---
+# Installation order
+#
+#   0. Confirm playbook launch
+#   1. Infrastructure checks (optional)
+#   2. Network check
+#   3. Stop Vitam timers
+#   4. Normalize
+#   5. Consul
+#   6. Prometheus node exporter
+#   7. Elasticsearch Log
+#   8. Log server
+#   9. Syslog
+#  10. Elasticsearch Data
+#  11. Kibana Data
+#  12. Mongo
+#  13. Vitam applications
+#  14. Start Vitam timers
+#  15. IHM Demo
+
+### CONFIRM PLAYBOOK LAUNCH ###
+- hosts: localhost
+  any_errors_fatal: yes
+  gather_facts: no
+  vars_prompt:
+    name: "confirmation"
+    prompt: "Are you sure you want to run this playbook ?\nAnswer with 'YES'"
+    default: "NO"
+    private: no
+  tasks:
+    - name: Check Confirmation
+      fail: msg="Playbook run confirmation failed"
+      when: confirmation|upper != "YES"
+
+### INFRASTRUCTURE CHECKS ###
+- hosts: vitam
+  any_errors_fatal: true
+  roles:
+    - { role: checks_infra, when: checks_infra | default(false) | bool == true }
+
+### HOSTS NETWORK VARS CHECK ###
+- hosts: vitam
+  any_errors_fatal: true
+  roles:
+    - checks
+
+### STOP VITAM TIMERS ###
+- name: Stop Vitam timers
+  import_playbook: internal_stop_vitam_timers.yml
+
+### HOSTS NORMALIZATION ###
+- hosts: vitam
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - normalize-host
+    - selinux_conf
+    - syslogd
+
+### CONSUL INSTALLATION ###
+- hosts: hosts_consul_server
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - consul
+
+- hosts: vitam
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - { role: consul, when: "( inventory_hostname not in groups['hosts_consul_server'] ) and ( consul_disabled | default(false) | bool == false )" }
+
+### PROMETHEUS NODE EXPORTER INSTALLATION OR UNINSTALL ###
+- hosts: vitam
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - prometheus-node-exporter
+
+### PROMETHEUS CONSUL EXPORTER INSTALLATION OR UNINSTALL ###
+- hosts: vitam
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - { role: prometheus-consul-exporter, when: "consul_disabled | default(false) | bool != true" }
+
+### CEREBRO INSTALLATION ###
+- hosts: hosts_cerebro
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - role: cerebro
+
+### ELASTICSEARCH LOG INSTALLATION ###
+- hosts: hosts_elasticsearch_log
+  any_errors_fatal: true
+  roles:
+    - elasticsearch-cluster
+    - init_es_cluster_index_template
+    - { role: curator, tags: curator_logs}
+  vars:
+    composant: "{{ elasticsearch.log }}"
+
+### LOG SERVER INSTALLATION ###
+- hosts: hosts_logstash
+  any_errors_fatal: true
+  roles:
+    - logstash
+
+- hosts: hosts_kibana_log
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - kibana
+    - kibana_dashboards
+  vars:
+    composant: "{{ kibana.log }}"
+    elasticsearch_host: "{{ elasticsearch.log.host }}"
+    elasticsearch_port: "{{ elasticsearch.log.port_http }}"
+
+### ELASTICSEARCH DATA INSTALLATION ###
+- hosts: hosts_elasticsearch_data
+  any_errors_fatal: true
+  roles:
+    - elasticsearch-cluster
+    - init_es_cluster_index_template
+  vars:
+    composant: "{{ elasticsearch.data }}"
+
+- hosts: hosts_kibana_data
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.elastickibanainterceptor }}"
+
+### KIBANA DATA INSTALLATION ###
+- hosts: hosts_kibana_data
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - kibana
+    - kibana_dashboards
+  vars:
+    composant: "{{ kibana.data }}"
+    elasticsearch_host: "{{ vitam.elastickibanainterceptor.host }}"
+    elasticsearch_port: "{{ vitam.elastickibanainterceptor.port_service }}"
+
+### MONGO DB INSTALLATION ###
+
+- import_playbook: mongodb_data.yml
+
+- import_playbook: mongodb_offer.yml
+
+### VITAM ###
+- hosts: hosts_storage_offer_default
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+    - offer
+    - timers
+  vars:
+    vitam_struct: "{{ vitam.storageofferdefault }}"
+    password_keystore: "{{ keystores.server.offer }}"
+    password_manager_keystore: "{{ keystores.server.offer }}"
+    password_truststore: "{{ truststores.client_storage }}"
+    password_grantedstore: "{{ grantedstores.client_storage }}"
+    vitam_certificate_client_type: "storage"
+    timers_list: "{{ vitam_timers.offer }}"
+
+- hosts: hosts_storage_engine
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+    - timers
+  vars:
+    vitam_struct: "{{ vitam.storageengine }}"
+    vitam_certificate_client_type: "storage"
+    vitam_timestamp_usage: secure-storage
+    timers_list: "{{ vitam_timers.storage }}"
+
+- hosts: hosts_metadata
+  gather_facts: no
+  any_errors_fatal: true
+  # First server started alone to ensure indexes are created once
+  serial:
+    - 1
+    - "100%"
+  roles:
+    - elasticsearch-mapping
+    - vitam
+    - timers
+    - metadata
+  vars:
+    vitam_struct: "{{ vitam.metadata }}"
+    timers_list: "{{ vitam_timers.metadata }}"
+
+- hosts: hosts_logbook
+  gather_facts: no
+  any_errors_fatal: true
+  # First server started alone to ensure indexes are created once
+  serial:
+    - 1
+    - "100%"
+  roles:
+    - vitam
+    - timers
+    - logbook
+  vars:
+    vitam_struct: "{{ vitam.logbook }}"
+    vitam_timestamp_usage: secure-logbook
+    timers_list: "{{ vitam_timers.logbook }}"
+
+- hosts: hosts_workspace
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.workspace }}"
+
+- hosts: hosts_metadata_collect
+  # First server started alone to ensure indexes are created once
+  serial:
+    - 1
+    - "100%"
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - elasticsearch-mapping
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.metadata_collect }}"
+
+- hosts: hosts_workspace_collect
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.workspace_collect }}"
+
+- hosts: hosts_collect
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - siegfried
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.collect }}"
+    password_keystore: "{{ keystores.server.collect }}"
+    password_manager_keystore: "{{ keystores.server.collect }}"
+    password_truststore: "{{ truststores.client_external }}"
+    password_grantedstore: "{{ grantedstores.client_external }}"
+    vitam_certificate_client_type: "external"
+
+- hosts: hosts_functional_administration
+  gather_facts: no
+  any_errors_fatal: true
+  # First server started alone to ensure indexes are created once
+  serial:
+    - 1
+    - "100%"
+  roles:
+    - vitam
+    - timers
+    - functional_administration
+  vars:
+    vitam_struct: "{{ vitam.functional_administration }}"
+    timers_list: "{{ vitam_timers.functional_administration }}"
+
+- hosts: hosts_security_internal
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.security_internal }}"
+
+- hosts: vitam
+  any_errors_fatal: true
+  roles:
+    - { role: tests_install, when: tests_install | default(false) | bool == true }
+
+- hosts: hosts_security_internal
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - { role: init_contexts_and_security_profiles, tags: update_vitam_certificates, when: primary_site | lower == "true" }
+    - { role: init_ontology, when: primary_site | lower == "true" }
+  vars:
+    vitam_struct: "{{ vitam.security_internal }}"
+
+- hosts: hosts_processing
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.processing }}"
+
+- hosts: hosts_batch_report
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.batchreport }}"
+
+- hosts: hosts_worker
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - siegfried
+    - vitam
+    - griffins
+  vars:
+    vitam_struct: "{{ vitam.worker }}"
+    vitam_timestamp_usage: secure-logbook
+
+- hosts: hosts_access_internal
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.accessinternal }}"
+
+- hosts: hosts_access_external
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.accessexternal }}"
+    password_keystore: "{{ keystores.server.access_external }}"
+    password_manager_keystore: "{{ keystores.server.access_external }}"
+    password_truststore: "{{ truststores.client_external }}"
+    password_grantedstore: "{{ grantedstores.client_external }}"
+    vitam_certificate_client_type: "external"
+
+# 2 differents steps, due to https://github.com/ansible/ansible/issues/15476
+- hosts: hosts_access_external
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - { role: init_pronom, when: primary_site | lower == "true" }
+  vars:
+    vitam_struct: "{{ vitam.accessexternal }}"
+    password_keystore: "{{ keystores.server.access_external }}"
+    password_manager_keystore: "{{ keystores.server.access_external }}"
+    password_truststore: "{{ truststores.client_external }}"
+    password_grantedstore: "{{ grantedstores.client_external }}"
+    vitam_certificate_client_type: "external"
+
+- hosts: hosts_ingest_internal
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.ingestinternal }}"
+
+- hosts: hosts_ingest_external
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - siegfried
+    - antivirus
+    - create_upload_dir
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.ingestexternal }}"
+    password_keystore: "{{ keystores.server.ingest_external }}"
+    password_manager_keystore: "{{ keystores.server.ingest_external }}"
+    password_truststore: "{{ truststores.client_external }}"
+    password_grantedstore: "{{ grantedstores.client_external }}"
+    vitam_certificate_client_type: "external"
+
+### START VITAM TIMERS ###
+- name: Start Vitam timers
+  import_playbook: internal_start_vitam_timers.yml
+
+### IHM DEMO ###
+- hosts: hosts_ihm_demo
+  gather_facts: no
+  any_errors_fatal: true
+  roles:
+    - vitam
+  vars:
+    vitam_struct: "{{ vitam.ihm_demo }}"
+    vitam_certificate_client_type: "external"
+    password_keystore: "{{ keystores.server.ihm_demo }}"
+    password_manager_keystore: "{{ keystores.server.ihm_demo }}"
+    password_truststore: "{{ truststores.client_external }}"
+    password_grantedstore: "{{ grantedstores.client_external }}"

@@ -1,0 +1,114 @@
+
+# Configuration MongoDB
+mongoDbNodes:
+{% for server in groups['hosts_mongos_data'] %}
+- dbHost: {{ hostvars[server]['ip_service'] }}
+  dbPort: {{ mongodb.mongos_port }}
+{% endfor %}
+dbName: logbook
+dbAuthentication: {{ mongodb.mongo_authentication }}
+dbUserName: {{ mongodb['mongo-data'].logbook.user }}
+dbPassword: {{ mongodb['mongo-data'].logbook.password }}
+jettyConfig: jetty-config.xml
+p12LogbookPassword: {{ keystores.timestamping.secure_logbook }}
+p12LogbookFile: keystore_secure-logbook.p12
+workspaceUrl: {{ vitam.workspace | client_url }}
+processingUrl: {{ vitam.processing | client_url }}
+
+# ElasticSearch
+clusterName: {{ vitam_struct.cluster_name }}
+elasticsearchNodes:
+{% for server in groups['hosts_elasticsearch_data'] %}
+- hostName: {{ hostvars[server]['ip_service'] }}
+  httpPort: {{ elasticsearch.data.port_http }}
+{% endfor %}
+
+# ElasticSearch tenant indexation
+elasticsearchTenantIndexation:
+  default_config:
+    logbookoperation:
+      number_of_shards: {{ vitam_elasticsearch_tenant_indexation.default_config.logbookoperation.number_of_shards }}
+      number_of_replicas: {{ vitam_elasticsearch_tenant_indexation.default_config.logbookoperation.number_of_replicas }}
+
+{% if vitam_elasticsearch_tenant_indexation.dedicated_tenants is defined and vitam_elasticsearch_tenant_indexation.dedicated_tenants is not none %}
+  dedicated_tenants:
+{% for entry in vitam_elasticsearch_tenant_indexation.dedicated_tenants %}
+{% if (entry.logbookoperation is defined and (entry.logbookoperation.number_of_shards is defined or entry.logbookoperation.number_of_replicas is defined)) %}
+  - tenants: '{{ entry.tenants }}'
+    logbookoperation:
+{% if entry.logbookoperation.number_of_shards is defined %}
+      number_of_shards: {{ entry.logbookoperation.number_of_shards }}
+{% endif %}
+{% if entry.logbookoperation.number_of_replicas is defined %}
+      number_of_replicas: {{ entry.logbookoperation.number_of_replicas }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if vitam_elasticsearch_tenant_indexation.grouped_tenants is defined and vitam_elasticsearch_tenant_indexation.grouped_tenants is not none %}
+  grouped_tenants:
+{% for entry in vitam_elasticsearch_tenant_indexation.grouped_tenants %}
+{% if (entry.logbookoperation is defined and (entry.logbookoperation.number_of_shards is defined or entry.logbookoperation.number_of_replicas is defined)) %}
+  - name: '{{ entry.name }}'
+    tenants: '{{ entry.tenants }}'
+    logbookoperation:
+{% if entry.logbookoperation.number_of_shards is defined %}
+      number_of_shards: {{ entry.logbookoperation.number_of_shards }}
+{% endif %}
+{% if entry.logbookoperation.number_of_replicas is defined %}
+      number_of_replicas: {{ entry.logbookoperation.number_of_replicas }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+#Basic Authentication
+adminBasicAuth:
+- userName: {{ admin_basic_auth_user }}
+  password: {{ admin_basic_auth_password }}
+
+## Configuration for logbook coherence check
+# list of operations that generate LFC
+opWithLFC: [
+  "PROCESS_SIP_UNITARY",
+  "FILINGSCHEME",
+  "HOLDINGSCHEME",
+  "UPDATE_RULES_ARCHIVE_UNITS",
+  "PROCESS_AUDIT",
+  "STP_UPDATE_UNIT"]
+# list of events not declared in wf
+opEventsNotInWf: [
+  "STP_SANITY_CHECK_SIP",
+  "SANITY_CHECK_SIP",
+  "CHECK_CONTAINER",
+  "STP_UPLOAD_SIP"
+]
+# list of events to skip for OP-LFC check
+opLfcEventsToSkip: [
+  "STP_SANITY_CHECK_SIP", "SANITY_CHECK_SIP", "CHECK_CONTAINER", "STP_UPLOAD_SIP", "ATR_NOTIFICATION", "ROLL_BACK",
+  "STORAGE_AVAILABILITY_CHECK", "ACCESSION_REGISTRATION",
+  "ROLL_BACK", "ATR_NOTIFICATION", "COMMIT_LIFE_CYCLE_OBJECT_GROUP", "COMMIT_LIFE_CYCLE_UNIT",
+  "LIST_OBJECTGROUP_ID", "REPORT_AUDIT",
+  "LIST_ARCHIVE_UNITS", "LIST_RUNNING_INGESTS"]
+
+# Configuration des alertes de securite
+alertEvents:
+- evType: 'CHECK_HEADER.CHECK_CONTRACT_INGEST'
+  outcome: 'KO'
+- evType: 'CHECK_RULES.MAX_DURATION_EXCEEDS'
+  outcome: 'KO'
+- evType: 'CHECK_RULES'
+  outcome: 'KO'
+- outDetail: 'CHECK_CLASSIFICATION_LEVEL.KO'
+- outDetail: 'STP_PERSONAL_CERTIFICATE_CHECK.KO'
+
+# Traceability params
+operationTraceabilityTemporizationDelay: {{ vitam.logbook.operationTraceabilityTemporizationDelay }}
+operationTraceabilityMaxRenewalDelay: {{ vitam.logbook.operationTraceabilityMaxRenewalDelay }}
+operationTraceabilityMaxRenewalDelayUnit: {{ vitam.logbook.operationTraceabilityMaxRenewalDelayUnit }}
+operationTraceabilityThreadPoolSize: {{ vitam.logbook.operationTraceabilityThreadPoolSize }}
+lifecycleTraceabilityTemporizationDelay: {{ vitam.logbook.lifecycleTraceabilityTemporizationDelay }}
+lifecycleTraceabilityMaxRenewalDelay: {{ vitam.logbook.lifecycleTraceabilityMaxRenewalDelay }}
+lifecycleTraceabilityMaxRenewalDelayUnit: {{ vitam.logbook.lifecycleTraceabilityMaxRenewalDelayUnit }}
+lifecycleTraceabilityMaxEntries: {{ vitam.logbook.lifecycleTraceabilityMaxEntries }}

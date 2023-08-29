@@ -1,0 +1,48 @@
+---
+
+- import_tasks: selinux.yml
+
+- import_tasks: apparmor.yml
+
+- name: check whether VITAM parent dir already exists
+  stat:
+    path: "{{ vitam_defaults.folder.root_path }}"
+  register: root_dir
+
+- name: fail if this VITAM parent dir is a symlink
+  fail:
+    msg: "Whoops! VITAM parent dir should not be a symlink !"
+  when: root_dir.stat.islnk is defined and root_dir.stat.islnk == "true"
+
+- name: Ensure parent dir is OK with correct permissions
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0555
+
+- name: Ensure {{ vitam_defaults.folder.root_path }} sub-directories exist
+  file:
+    path: "{{ vitam_defaults.folder.root_path }}/{{ item }}"
+    owner: root
+    group: root
+    state: directory
+    mode: 0555
+  with_items:
+    - app
+    - bin
+    - conf
+    - data
+    - lib
+    - log
+    - script
+    - tmp
+    - run
+
+- include_tasks: centos.yml
+  when: ansible_os_family == "RedHat"
+
+# No openjdk8 without jessie-backports with debian
+- include_tasks: debian.yml
+  when: ansible_os_family == "Debian"

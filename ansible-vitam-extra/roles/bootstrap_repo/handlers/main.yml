@@ -1,0 +1,6 @@
+---
+
+- name: purge yum cache
+  command: yum clean all
+  args:
+    warn: no

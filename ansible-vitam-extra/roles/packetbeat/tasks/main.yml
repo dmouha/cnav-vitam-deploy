@@ -1,0 +1,55 @@
+#### Packetbeat installation ###
+
+- name: install libpcap (prerequisite for Packetbeat)
+  package:
+    name: libpcap
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  when: ansible_os_family == "RedHat"
+
+- name: install libpcap (prerequisite for Packetbeat)
+  package:
+    name: libpcap0.8
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+  when: ansible_os_family == "Debian"
+
+# TODO Run packetbeat as a non-root user, using a specific user with full restrictions
+- name: install Packetbeat
+  package:
+    name: packetbeat
+    state: latest
+  register: result
+  retries: "{{ packages_install_retries_number }}"
+  until: result is succeeded
+  delay: "{{ packages_install_retries_delay }}"
+
+- name: setup Packetbeat configuration file
+  template:
+    src: packetbeat.yml.j2
+    dest: /etc/packetbeat/packetbeat.yml
+    owner: root
+    mode: 0644
+
+- name: import dashboards
+  shell:  /usr/bin/packetbeat setup --dashboards
+  run_once: true
+  when: groups['hosts_kibana_log'] | length) > 0
+  delegate_to: "{{ groups['hosts_kibana_log'][0] }}"
+  retries: 5
+  delay: 30
+  register: result
+  until: result.rc == 0
+  notify:
+    - "packetbeat - restart kibana"
+
+- name: restart packetbeat
+  service:
+    name: packetbeat
+    state: restarted
+    enabled: "{{ packetbeat.at_boot | default(service_at_boot) }}"

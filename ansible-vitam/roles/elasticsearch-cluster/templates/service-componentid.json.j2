@@ -1,0 +1,25 @@
+{
+  "service": {
+    "name": "{{ composant.cluster_name }}",
+    {% if composant.groupe=='log' %}
+    "address": "{{ ip_admin }}",
+    {% else %}
+    "address": "{{ ip_service }}",
+    {% endif %}
+    "port": {{ composant.port_http }},
+    "enable_tag_override": false, 
+    "tags": ["bdd","elasticsearch","{{ composant.cluster_name }}"],
+    "checks": [
+      {
+        "name": "{{ composant.cluster_name }} : HTTP check",
+        "notes": "Statut HTTP {{ composant.cluster_name }}",
+        {% if composant.groupe=='log' %}
+        "http": "http://{{ ip_admin }}:{{ composant.port_http }}",
+        {% else %}
+        "http": "http://{{ ip_service }}:{{ composant.port_http }}",
+        {% endif %}
+        "interval": "{{ composant.consul_check_http }}s"
+      }
+    ]
+  }
+}

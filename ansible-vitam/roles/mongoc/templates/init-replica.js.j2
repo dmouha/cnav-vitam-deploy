@@ -1,0 +1,26 @@
+
+rs.initiate(
+    {
+        _id: "configsvr",
+        configsvr: true,
+        members:
+        [
+            { _id: 0, host: "{{ ip_service }}:{{ mongodb.mongoc_port }}" }
+        ]
+    }
+)
+
+// Beurk FIXME: Try a while with rs.status()...
+sleep(10000)
+
+{% for host in groups[group_name] %}
+    {% if mongo_cluster_name == hostvars[host]['mongo_cluster_name'] %}
+    {% if hostvars[host]['mongo_rs_bootstrap'] is not defined or hostvars[host]['mongo_rs_bootstrap']|lower != "true" %}
+        {% if hostvars[host]['mongo_arbiter'] is defined and hostvars[host]['mongo_arbiter']|lower == "true" %}
+            rs.addArb("{{ hostvars[host]['ip_service'] }}:{{ mongodb.mongoc_port }}")
+        {% else %}
+            rs.add("{{ hostvars[host]['ip_service'] }}:{{ mongodb.mongoc_port }}")
+        {% endif %}
+    {% endif %}
+    {% endif %}
+{% endfor %}

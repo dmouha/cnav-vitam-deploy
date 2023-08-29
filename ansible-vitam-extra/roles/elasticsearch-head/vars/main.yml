@@ -1,0 +1,8 @@
+---
+
+elasticsearch_head_old_image: "mobz/elasticsearch-head"
+elasticsearch_head_old_version: "5-alpine"
+elasticsearch_head_image: "tobias74/elasticsearch-head"
+elasticsearch_head_version: "6"
+elasticsearch_head_port: 9100
+elasticsearch_head_external_port: 9100

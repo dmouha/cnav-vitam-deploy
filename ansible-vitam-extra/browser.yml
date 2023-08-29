@@ -1,0 +1,6 @@
+---
+
+- hosts: vitam
+  any_errors_fatal: true
+  roles:
+    - { role: vitam_browser, when: "browser.enabled | default(false) | bool == true" }
